@@ -9,6 +9,8 @@ struct Uniform {
     camera_up: vec3f,
 };
 
+const PI = 3.14159265359;
+
 alias ShaderType = u32;
 const SHADER_TYPE_LAMBERTIAN: u32 = 0u;
 const SHADER_TYPE_PHONG: u32 = 1u;
@@ -52,23 +54,42 @@ struct Light {
     dist: f32,
 };
 
+fn light_init() -> Light {
+    return Light(
+        vec3f(0.0),
+        vec3f(0.0),
+        999999.0,
+    );
+}
+
+
+
 struct HitRecord {
     has_hit: bool,
+    depth: i32,
     dist: f32,
     position: vec3f,
     normal: vec3f,
+    // Shader properties
     color: vec3f,
     shader: ShaderType,
+    ior1_over_ior2: f32,
+    specular: f32,
+    shininess: f32,
 };
 
 fn hit_record_init() -> HitRecord {
     return HitRecord(
-        false, 
+        false,
+        0,
         0.0, 
         vec3f(0.0), 
         vec3f(0.0), 
         vec3f(0.0),
         SHADER_TYPE_DEFAULT,
+        1.0,
+        0.0,
+        0.0,
     );
 }
 
@@ -156,7 +177,7 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, positio
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
     (*hit).normal = normal;
-    (*hit).color = vec3f(0.0, 0.0, 0.0);
+    (*hit).color = vec3f(0.1, 0.7, 0.0);
     return true;
 }
 
@@ -191,7 +212,7 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
     (*hit).normal = normal;
-    (*hit).color = vec3f(0.3, 0.0, 0.0);
+    (*hit).color = vec3f(0.4, 0.3, 0.2);
     return true;
 }
 
@@ -225,29 +246,49 @@ fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center
     return true;
 }
 
+fn sample_point_light(pos: vec3f) -> Light {
+    let light_pos = vec3f(0.0, 1.0, 0.0);
+    let light_intensity = vec3f(PI, PI, PI);
+    var light = light_init();
+    
+    let dir = light_pos - pos;
+    let dist = dot(dir, dir);
+
+    light.dist = dist;
+    light.l_i = light_intensity / (dist * dist);
+    light.w_i = dir;
+
+    return light;
+}
+
 fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    let hit_record = *hit;
+    var hit_record = *hit;
+    var color = vec3f(0.0, 0.0, 0.0);
+    hit_record.has_hit = true;
+    hit_record.depth += 1;
 
     switch(hit_record.shader) {
         case 0u: {
-            return lambertian(r, hit);
+            color = lambertian(r, hit);
         }
         case 1u: {
-            return phong(r, hit);
+            color = phong(r, hit);
         }
         case 2u: {
-            return mirror(r, hit);
+            color = mirror(r, hit);
         }
         default: {
-            return vec3f(0.0, 0.0, 0.0);
+            color = vec3f(0.0, 0.0, 0.0);
         }
     }
+    *hit = hit_record;
+    return color;
 }
 
 fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
     let hit_record = *hit;
     if (hit_record.has_hit) {
-        return hit_record.color;
+        return hit_record.color * sample_point_light(hit_record.position).l_i;
     }
     return vec3f(0.0, 0.0, 0.0);
 }
