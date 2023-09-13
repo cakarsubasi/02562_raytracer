@@ -5,7 +5,7 @@ use crate::{
     data::{Uniform, Vertex}};
 use crate::data;
 
-use std::{fs::File, thread};
+use std::fs::File;
 use std::io::prelude::*;
 
 use winit::event::*;
@@ -13,6 +13,8 @@ use winit::event::*;
 use wgpu::util::DeviceExt;
 
 use std::error::Error;
+
+const CAMERA_SPEED: f32 = 0.05;
 
 pub struct State {
     surface: wgpu::Surface,
@@ -35,7 +37,7 @@ pub struct State {
 
 #[derive(Debug)]
 pub enum ShaderCreationError {
-    ParsingError,
+    WgpuError(wgpu::Error),
     IOError(std::io::Error),
 }
 
@@ -48,7 +50,7 @@ impl From<std::io::Error> for ShaderCreationError {
 impl Error for ShaderCreationError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            ShaderCreationError::ParsingError => None,
+            ShaderCreationError::WgpuError(internal) => Some(internal),
             ShaderCreationError::IOError(internal) => Some(internal),
         }
     }
@@ -65,7 +67,7 @@ impl Error for ShaderCreationError {
 impl std::fmt::Display for ShaderCreationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ParsingError => { f.write_fmt(format_args!("Internal WGPU Error"))}
+            Self::WgpuError(err) => { f.write_fmt(format_args!("Internal WGPU Error: {err}"))}
             Self::IOError(err) => err.fmt(f),
         }
     }
@@ -89,7 +91,7 @@ impl State {
         // State owns the window so this should be safe.
         let surface = unsafe { instance.create_surface(&window) }.unwrap();
 
-        let camera_controller = CameraController::new(0.2);
+        let camera_controller = CameraController::new(CAMERA_SPEED);
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -241,25 +243,21 @@ impl State {
         self.render_pipeline = Self::create_render_pipeline(&self.device, &self.render_pipeline_layout, shader, &self.config);
     }
 
-    pub fn create_shader_module(&self, shader_location: &str) -> Result<wgpu::ShaderModule, ShaderCreationError> {
+    pub async fn create_shader_module(&self, shader_location: &str) -> Result<wgpu::ShaderModule, ShaderCreationError> {
         let mut file = File::open::<std::path::PathBuf>(shader_location.into())?;
         let mut shader_source = String::new();
         file.read_to_string(&mut shader_source)?;
-        let mut shader_result = Err(ShaderCreationError::ParsingError);
 
-        thread::scope(|s| {
-        let thread = s.spawn(move || {
-            self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Shader"),
-                source: wgpu::ShaderSource::Wgsl(shader_source.as_str().into()),
-            })
+        self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let shader_maybe = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Shader"),
+            source: wgpu::ShaderSource::Wgsl(shader_source.as_str().into()),
         });
-
-        shader_result = match thread.join() {
-            Ok(value) => Ok(value),
-            Err(_) => Err(ShaderCreationError::ParsingError),
-        }
-        });
+        let shader_result = 
+        match self.device.pop_error_scope().await {
+            None => Ok(shader_maybe),
+            Some(err) => Err(ShaderCreationError::WgpuError(err)),
+        };
 
         shader_result
     }
@@ -348,10 +346,11 @@ impl State {
                 },
                 ..
             } => {
-                let shader_module = self.create_shader_module("shader.wgsl");
+                let shader_module = 
+                    pollster::block_on(self.create_shader_module("res/shaders/shader.wgsl"));
                 match shader_module {
                     Ok(module) => self.recreate_render_pipeline(&module),
-                    Err(_) => {eprintln!("Whoops!")}
+                    Err(err) => {eprintln!("{err}")}
                 }
 
             }
@@ -363,7 +362,7 @@ impl State {
 
     pub fn update(&mut self) {
         self.camera_controller.update_camera(&mut self.camera);
-        self.uniform.update(&self.camera);
+        self.uniform.update(&self.camera, self.aspect_ratio());
         self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniform]));
     }
 
@@ -410,5 +409,9 @@ impl State {
         output.present();
 
         Ok(())
+    }
+
+    pub fn aspect_ratio(&self) -> f32 {
+        self.config.width as f32 / self.config.height as f32
     }
 }
