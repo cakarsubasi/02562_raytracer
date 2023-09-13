@@ -1,0 +1,6 @@
+[book]
+authors = ["Cem Akarsubaşı"]
+language = "en"
+multilingual = false
+src = "src"
+title = "02562 Rendering Journal"
