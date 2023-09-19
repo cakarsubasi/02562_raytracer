@@ -10,6 +10,9 @@ struct Uniform {
 };
 
 const PI = 3.14159265359;
+const ETA = 0.00001;
+
+const BACKGROUND_COLOR: vec3f = vec3f(0.0, 0.0, 0.5);
 
 alias ShaderType = u32;
 const SHADER_TYPE_LAMBERTIAN: u32 = 0u;
@@ -17,6 +20,8 @@ const SHADER_TYPE_PHONG: u32 = 1u;
 const SHADER_TYPE_MIRROR: u32 = 2u;
 const SHADER_TYPE_NO_RENDER: u32 = 255u;
 const SHADER_TYPE_DEFAULT: u32 = 0u;
+
+const MAX_DEPTH: i32 = 10;
 
 @group(0) @binding(0)
 var<uniform> uniforms: Uniform;
@@ -36,6 +41,15 @@ struct Ray {
     tmax: f32,
     tmin: f32,
 };
+
+fn ray_init(direction: vec3f, origin: vec3f) -> Ray {
+    return Ray(
+        direction,
+        origin,
+        5000.0,
+        ETA,
+    );
+}
 
 fn ray_at(r: Ray, dist: f32) -> vec3f {
     return r.origin + r.direction * dist;
@@ -70,8 +84,10 @@ struct HitRecord {
     dist: f32,
     position: vec3f,
     normal: vec3f,
-    // Shader properties
-    color: vec3f,
+    // color contribution
+    ambient: vec3f,
+    diffuse: vec3f,
+    // shader properties
     shader: ShaderType,
     ior1_over_ior2: f32,
     specular: f32,
@@ -84,8 +100,11 @@ fn hit_record_init() -> HitRecord {
         0,
         0.0, 
         vec3f(0.0), 
-        vec3f(0.0), 
         vec3f(0.0),
+        // color contribution
+        vec3f(0.0),
+        vec3f(0.0),
+        // shader properties
         SHADER_TYPE_DEFAULT,
         1.0,
         0.0,
@@ -133,14 +152,14 @@ fn get_camera_ray(uv: vec2f) -> Ray {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let bgcolor = vec4f(0.1, 0.3, 0.6, 1.0);
-    let max_depth = 10;
+    let max_depth = MAX_DEPTH;
     let uv = in.coords * 0.5;
     var r = get_camera_ray(uv);
     var hit = hit_record_init();
 
     var result = vec3f(0.0);
     // each loop is one bounce
-    for (var i = 0; i < max_depth; i++) {
+    for (var i = 0; i < 1; i++) {
         if (intersect_scene(&r, &hit)) {
             result += shade(&r, &hit);
         } else {
@@ -151,6 +170,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             break;
         }
     }
+
+    
     //return vec4f(result, bgcolor.a);
     return vec4f(pow(result, vec3f(1.0/1.0)), bgcolor.a);
 }
@@ -177,7 +198,7 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, positio
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
     (*hit).normal = normal;
-    (*hit).color = vec3f(0.1, 0.7, 0.0);
+    (*hit).diffuse = vec3f(0.1, 0.7, 0.0);
     return true;
 }
 
@@ -212,7 +233,7 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
     (*hit).normal = normal;
-    (*hit).color = vec3f(0.4, 0.3, 0.2);
+    (*hit).diffuse = vec3f(0.4, 0.3, 0.2);
     return true;
 }
 
@@ -242,12 +263,13 @@ fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center
     let normal = normalize(pos - center);
     (*hit).position = pos;
     (*hit).normal = normal;
-    (*hit).color = vec3f(normal.x, normal.y, normal.z);//vec3f(0.0, 0.5, 0.0);
+    (*hit).diffuse = vec3f(0.0, 0.5, 0.0);
+    (*hit).shader = SHADER_TYPE_MIRROR;
     return true;
 }
 
 fn sample_point_light(pos: vec3f) -> Light {
-    let light_pos = vec3f(0.0, 1.0, 0.0);
+    let light_pos = vec3f(0.0, 1.2, 0.0);
     let light_intensity = vec3f(PI, PI, PI);
     var light = light_init();
     
@@ -264,7 +286,7 @@ fn sample_point_light(pos: vec3f) -> Light {
 fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     var hit_record = *hit;
     var color = vec3f(0.0, 0.0, 0.0);
-    hit_record.has_hit = true;
+    hit_record.has_hit = false;
     hit_record.depth += 1;
 
     switch(hit_record.shader) {
@@ -286,26 +308,78 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 }
 
 fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    let hit_record = *hit;
-    if (hit_record.has_hit) {
-        return hit_record.color * sample_point_light(hit_record.position).l_i;
+    var hit_record = *hit;
+    (*hit).depth = MAX_DEPTH;
+    let light = sample_point_light(hit_record.position);
+    let normal = hit_record.normal;
+
+    let ray_dir = light.w_i;
+    let ray_orig = hit_record.position + hit_record.normal * ETA;
+    var ray = ray_init(ray_dir, ray_orig);
+
+    let blocked = intersect_scene(&ray, hit);
+    let ambient = hit_record.ambient;
+    var diffuse = vec3f(0.0);
+
+    // ambient only
+    if (blocked) {
+        
+    } else { // ambient and diffuse
+        diffuse = light_diffuse_contribution(light, normal, hit_record.specular);
     }
-    return vec3f(0.0, 0.0, 0.0);
+
+    return diffuse * diffuse_and_ambient(hit_record.diffuse, ambient);
 }
+
+fn light_diffuse_contribution(light: Light, normal: vec3f, specular: f32) -> vec3f {
+    let one_minus_specular = 1.0 - specular;
+    var diffuse = vec3f(dot(normal, light.w_i));
+    diffuse *= light.l_i;
+    diffuse *= one_minus_specular / PI;
+    return diffuse;
+}
+
+fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
+    return (ambient * 0.1 + diffuse * 0.9);
+} 
 
 fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
     let hit_record = *hit;
     if (hit_record.has_hit) {
-        return hit_record.color;
+        return hit_record.diffuse * sample_point_light(hit_record.position).l_i;
+    }
+    return vec3f(0.0, 0.0, 0.0);
+}
+
+
+fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
+    let hit_record = *hit;
+
+    let normal = hit_record.normal;
+    let ray_dir = reflect((*r).direction, normal);
+    let ray_orig = hit_record.position + normal * ETA;
+    var ray = ray_init(ray_dir, ray_orig);
+
+    let mirrored = intersect_scene(&ray, hit);
+
+    if (mirrored) {
+        return lambertian(&ray, hit);
+        //let light = sample_point_light(hit_record.position);
+        //let diffuse = light_diffuse_contribution(light, (*hit).normal, (*hit).specular);
+        //return  diffuse * diffuse_and_ambient((*hit).diffuse, (*hit).ambient);
+    } else {
+        return BACKGROUND_COLOR;
+        //return vec3f(0.0, 0.0, 0.0);
+    }
+
+
+    if (hit_record.has_hit) {
+        return hit_record.diffuse * sample_point_light(hit_record.position).l_i;
     }
     return vec3f(0.0, 0.0, 0.0);
 
 }
-fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    let hit_record = *hit;
-    if (hit_record.has_hit) {
-        return hit_record.color;
-    }
-    return vec3f(0.0, 0.0, 0.0);
 
+fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
+    return vec3f(0.0, 0.0, 0.0);
 }

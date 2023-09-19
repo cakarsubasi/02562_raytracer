@@ -1,13 +1,7 @@
 // Vertex shader
 
 struct Uniform {
-    view_proj: mat4x4<f32>, // 64 bytes
-    camera_pos: vec3f, // 12 bytes
-    camera_constant: f32, // 4 bytes
-    camera_look_at: vec3f, // 12 bytes
-    aspect_ratio: f32, // 4 bytes
-    camera_up: vec3f, // 12 bytes
-    // 4 byte padding
+    view_proj: mat4x4<f32>,
 };
 
 @group(0) @binding(0)
@@ -21,7 +15,6 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) coords: vec2<f32>,
 };
-
 
 struct Ray {
     direction: vec3f,
@@ -55,16 +48,6 @@ struct HitRecord {
     color: vec3f,
 };
 
-fn hit_record_init() -> HitRecord {
-    return HitRecord(
-        false, 
-        0.0, 
-        vec3f(0.0), 
-        vec3f(0.0), 
-        vec3f(0.0)
-    );
-}
-
 @vertex
 fn vs_main(
     model: VertexInput,
@@ -76,20 +59,16 @@ fn vs_main(
 }
 
 fn get_camera_ray(uv: vec2f) -> Ray {
-    //let e = vec3f(2.0, 1.5, 2.0);
-    //let p = vec3f(0.0, 0.5, 0.0);
-    //let u = vec3f(0.0, 1.0, 0.0);
-    let e = uniforms.camera_pos;
-    let p = uniforms.camera_look_at;
-    let u = uniforms.camera_up;
+    let e = vec3f(2.0, 1.5, 2.0);
+    let p = vec3f(0.0, 0.5, 0.0);
+    let u = vec3f(0.0, 1.0, 0.0);
     let v = normalize(p - e);
     let d = 1.0;
-    let aspect = uniforms.aspect_ratio;
 
     let b1 = normalize(cross(v, u));
     let b2 = cross(b1, v);
 
-    let q = b1 * uv.x + b2 * uv.y / aspect + v*d;
+    let q = b1 * uv.x + b2 * uv.y + v*d;
 
     let ray = Ray(
         q,
@@ -108,8 +87,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let max_depth = 10;
     let uv = in.coords * 0.5;
     var r = get_camera_ray(uv);
-    var hit = hit_record_init();
-
+    var hit = HitRecord(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0));
     var result = vec3f(0.0);
     // each loop is one bounce
     for (var i = 0; i < max_depth; i++) {
@@ -123,8 +101,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             break;
         }
     }
-    //return vec4f(result, bgcolor.a);
-    return vec4f(pow(result, vec3f(1.0/1.0)), bgcolor.a);
+    return vec4f(result, bgcolor.a);
+    //return vec4f(pow(result, vec3f(1.0/1.0)), bgcolor.a);
 }
 
 fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
@@ -148,7 +126,7 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, positio
     (*hit).dist = distance;
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
-    (*hit).normal = normal;
+    //(*hit).normal = normalize(pos - center);
     (*hit).color = vec3f(0.0, 0.0, 0.0);
     return true;
 }
@@ -183,7 +161,7 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     (*hit).dist = distance;
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
-    (*hit).normal = vec3f(0.0, 0.0, 0.0);
+    //(*hit).normal = normalize(pos - center);
     (*hit).color = vec3f(0.3, 0.0, 0.0);
     return true;
 }
