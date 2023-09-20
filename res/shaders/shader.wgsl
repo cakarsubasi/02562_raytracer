@@ -18,6 +18,7 @@ alias ShaderType = u32;
 const SHADER_TYPE_LAMBERTIAN: u32 = 0u;
 const SHADER_TYPE_PHONG: u32 = 1u;
 const SHADER_TYPE_MIRROR: u32 = 2u;
+const SHADER_TYPE_TRANSMIT: u32 = 3u;
 const SHADER_TYPE_NO_RENDER: u32 = 255u;
 const SHADER_TYPE_DEFAULT: u32 = 0u;
 
@@ -25,6 +26,12 @@ const MAX_DEPTH: i32 = 10;
 
 @group(0) @binding(0)
 var<uniform> uniforms: Uniform;
+
+@group(0) @binding(1)
+var<uniform> selection: u32;
+
+@group(1) @binding(0)
+var<uniform> hello: f32;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -105,7 +112,7 @@ fn hit_record_init() -> HitRecord {
         vec3f(0.0),
         vec3f(0.0),
         // shader properties
-        SHADER_TYPE_DEFAULT,
+        SHADER_TYPE_NO_RENDER,
         1.0,
         0.0,
         0.0,
@@ -159,7 +166,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var result = vec3f(0.0);
     // each loop is one bounce
-    for (var i = 0; i < 1; i++) {
+    for (var i = 0; i < max_depth; i++) {
         if (intersect_scene(&r, &hit)) {
             result += shade(&r, &hit);
         } else {
@@ -171,7 +178,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
-    
     //return vec4f(result, bgcolor.a);
     return vec4f(pow(result, vec3f(1.0/1.0)), bgcolor.a);
 }
@@ -193,12 +199,12 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, positio
         return false;
     }
     (*r).tmax = distance;
-    (*hit).has_hit = true;
     (*hit).dist = distance;
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
     (*hit).normal = normal;
     (*hit).diffuse = vec3f(0.1, 0.7, 0.0);
+    (*hit).shader = SHADER_TYPE_LAMBERTIAN;
     return true;
 }
 
@@ -228,12 +234,12 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     }
 
     (*r).tmax = distance;
-    (*hit).has_hit = true;
     (*hit).dist = distance;
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
     (*hit).normal = normal;
     (*hit).diffuse = vec3f(0.4, 0.3, 0.2);
+    (*hit).shader = SHADER_TYPE_LAMBERTIAN;
     return true;
 }
 
@@ -257,14 +263,18 @@ fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center
     }
 
     (*r).tmax = root;
-    (*hit).has_hit = true;
     (*hit).dist = root;
     let pos = ray_at(ray, root);
     let normal = normalize(pos - center);
     (*hit).position = pos;
     (*hit).normal = normal;
     (*hit).diffuse = vec3f(0.0, 0.5, 0.0);
-    (*hit).shader = SHADER_TYPE_MIRROR;
+    (*hit).shader = SHADER_TYPE_TRANSMIT;
+    if (dot(normal, ray.direction) < 0.0) {
+        (*hit).ior1_over_ior2 = 1.0 / 1.4;
+    } else {
+        (*hit).ior1_over_ior2 = 1.4 / 1.0;
+    }
     return true;
 }
 
@@ -286,8 +296,9 @@ fn sample_point_light(pos: vec3f) -> Light {
 fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     var hit_record = *hit;
     var color = vec3f(0.0, 0.0, 0.0);
-    hit_record.has_hit = false;
+    hit_record.has_hit = true;
     hit_record.depth += 1;
+    *hit = hit_record;
 
     switch(hit_record.shader) {
         case 0u: {
@@ -299,17 +310,18 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
         case 2u: {
             color = mirror(r, hit);
         }
+        case 3u: {
+            color = transmit(r, hit);
+        }
         default: {
-            color = vec3f(0.0, 0.0, 0.0);
+            color = vec3f(0.7, 0.0, 0.7);
         }
     }
-    *hit = hit_record;
     return color;
 }
 
 fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
     var hit_record = *hit;
-    (*hit).depth = MAX_DEPTH;
     let light = sample_point_light(hit_record.position);
     let normal = hit_record.normal;
 
@@ -353,33 +365,52 @@ fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 
 
 fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    let hit_record = *hit;
-
+    var hit_record = *hit;
+    
     let normal = hit_record.normal;
     let ray_dir = reflect((*r).direction, normal);
     let ray_orig = hit_record.position + normal * ETA;
-    var ray = ray_init(ray_dir, ray_orig);
+    *r = ray_init(ray_dir, ray_orig);
 
-    let mirrored = intersect_scene(&ray, hit);
+    hit_record.has_hit = false;
+    hit_record.shader = SHADER_TYPE_NO_RENDER;
 
-    if (mirrored) {
-        return lambertian(&ray, hit);
-        //let light = sample_point_light(hit_record.position);
-        //let diffuse = light_diffuse_contribution(light, (*hit).normal, (*hit).specular);
-        //return  diffuse * diffuse_and_ambient((*hit).diffuse, (*hit).ambient);
-    } else {
-        return BACKGROUND_COLOR;
-        //return vec3f(0.0, 0.0, 0.0);
-    }
+    *hit = hit_record;
 
-
-    if (hit_record.has_hit) {
-        return hit_record.diffuse * sample_point_light(hit_record.position).l_i;
-    }
     return vec3f(0.0, 0.0, 0.0);
 
 }
 
 fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
+    var hit_record = *hit;
+    let ray = *r;
+    let ray_dir = normalize(ray.direction);
+    var normal = normalize(hit_record.normal);
+    let ior = hit_record.ior1_over_ior2;
+    if (ior > 1.0) {
+        normal =  -normal;
+    }
+
+    let cos_thet_i = dot(ray_dir, normal);
+    let sin_thet_i_2 = 1.0 - cos_thet_i * cos_thet_i;
+    let cos_thet_t_2 = 1.0 - ior * ior * sin_thet_i_2;
+    if (cos_thet_t_2 < 0.0) {
+        return vec3f(0.7, 0.0, 0.7);
+        //return mirror(r, hit);
+    }
+    let sin_thet_i = sqrt(sin_thet_i_2);
+    let tangent = (normal * cos_thet_i - ray_dir) / sin_thet_i;
+    let t_sin_thet_t = ior * (normal * cos_thet_i - ray_dir);
+    let cos_thet_t = sqrt(cos_thet_t_2);
+
+    let w_t = t_sin_thet_t - normal * cos_thet_t;
+    let orig = hit_record.position - normal * ETA;
+
+    *r = ray_init(w_t, orig); 
+
+    hit_record.has_hit = false;
+    hit_record.shader = SHADER_TYPE_NO_RENDER;
+
+    *hit = hit_record;
     return vec3f(0.0, 0.0, 0.0);
 }

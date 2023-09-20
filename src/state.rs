@@ -152,36 +152,9 @@ impl State {
 
         // Uniform variables
         let uniform = Uniform::new();
-        let uniform_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Uniform buffer"),
-                contents: bytemuck:: cast_slice(&[uniform]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            }
-        );
-
-        let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
-                    count: None,
-                },
-            ],
-            label: Some("uniform_bind_group_layout"),
-        });
-
-        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &uniform_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
-                }
-            ],
-            label: Some("uniform_bind_group"),
-        });
+        let uniform_buffer = uniform.create_buffer(&device);
+        let uniform_bind_group_layout = Uniform::create_bind_group_layout(&device);
+        let uniform_bind_group = Uniform::create_bind_group(&device, &uniform_bind_group_layout, &uniform_buffer);
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),

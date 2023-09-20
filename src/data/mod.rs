@@ -1,10 +1,12 @@
 use cgmath::SquareMatrix;
 use crate::camera::Camera;
 
+use wgpu::util::DeviceExt;
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
-    position: [f32; 3],
+    position: [f32; 3]
 }
 
 impl Vertex {
@@ -54,6 +56,44 @@ impl Uniform {
             //_padding3: 0.0,
             _padding4: 0.0,
         }
+    }
+
+    pub fn create_buffer(self, device: &wgpu::Device) -> wgpu::Buffer {
+        device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Uniform buffer"),
+                contents: bytemuck:: cast_slice(&[self]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            }
+        )
+    }
+
+    pub fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None },
+                    count: None,
+                },
+            ],
+            label: Some("uniform_bind_group_layout"),
+        });
+        uniform_bind_group_layout
+    }
+
+    pub fn create_bind_group(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, buffer: &wgpu::Buffer) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }
+            ],
+            label: Some("uniform_bind_group"),
+        })
     }
 
     pub fn update(&mut self, camera: &Camera, aspect_ratio: f32) {
