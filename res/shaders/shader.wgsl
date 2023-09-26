@@ -19,6 +19,7 @@ const SHADER_TYPE_LAMBERTIAN: u32 = 0u;
 const SHADER_TYPE_PHONG: u32 = 1u;
 const SHADER_TYPE_MIRROR: u32 = 2u;
 const SHADER_TYPE_TRANSMIT: u32 = 3u;
+const SHADER_TYPE_GLOSSY: u32 = 4u;
 const SHADER_TYPE_NO_RENDER: u32 = 255u;
 const SHADER_TYPE_DEFAULT: u32 = 0u;
 
@@ -96,6 +97,7 @@ struct HitRecord {
     diffuse: vec3f,
     // shader properties
     shader: ShaderType,
+    base_color: vec3f,
     ior1_over_ior2: f32,
     specular: f32,
     shininess: f32,
@@ -113,6 +115,7 @@ fn hit_record_init() -> HitRecord {
         vec3f(0.0),
         // shader properties
         SHADER_TYPE_NO_RENDER,
+        vec3f(0.0),
         1.0,
         0.0,
         0.0,
@@ -269,13 +272,26 @@ fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center
     (*hit).position = pos;
     (*hit).normal = normal;
     (*hit).diffuse = vec3f(0.0, 0.5, 0.0);
-    (*hit).shader = SHADER_TYPE_TRANSMIT;
-    if (dot(normal, ray.direction) < 0.0) {
-        (*hit).ior1_over_ior2 = 1.0 / 1.4;
-    } else {
-        (*hit).ior1_over_ior2 = 1.4 / 1.0;
+
+    let shader_type = SHADER_TYPE_GLOSSY;
+    if (shader_type == SHADER_TYPE_TRANSMIT) {
+        setup_shader_transmissive(r, hit, 1.4);
+    } else if (shader_type == SHADER_TYPE_GLOSSY) {
+        setup_shader_transmissive(r, hit, 1.4);
+        (*hit).shader = shader_type;
+        (*hit).specular = 0.2;
+        (*hit).shininess = 42.0;
     }
     return true;
+}
+
+fn setup_shader_transmissive(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, material_ior: f32) {
+    (*hit).shader = SHADER_TYPE_TRANSMIT;
+    if (dot((*hit).normal, (*r).direction) < 0.0) {
+        (*hit).ior1_over_ior2 = 1.0 / material_ior;
+    } else {
+        (*hit).ior1_over_ior2 = material_ior / 1.0;
+    }
 }
 
 fn sample_point_light(pos: vec3f) -> Light {
@@ -313,8 +329,11 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
         case 3u: {
             color = transmit(r, hit);
         }
+        case 4u: {
+            color = glossy(r, hit);
+        }
         default: {
-            color = vec3f(0.7, 0.0, 0.7);
+            color = error_shader();
         }
     }
     return color;
@@ -357,10 +376,21 @@ fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
 
 fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
     let hit_record = *hit;
-    if (hit_record.has_hit) {
-        return hit_record.diffuse * sample_point_light(hit_record.position).l_i;
-    }
-    return vec3f(0.0, 0.0, 0.0);
+    let ray = *r;
+
+    let specular = hit_record.specular;
+    let o_m_s = 1.0 - hit_record.specular;
+    let s = hit_record.shininess;
+    let normal = hit_record.normal;
+    let w_i = ray.direction;
+    let w_o = normalize(uniforms.camera_pos - hit_record.position);
+
+    let light = sample_point_light(hit_record.position);
+    let w_r = reflect(-w_i, normal);
+    let refl = light.l_i * dot(ray.direction, hit_record.normal);
+    let phong_coeff = o_m_s / PI + specular * (s + 2.0) / (2.0 * PI) * pow(dot(w_o, w_r), s);
+
+    return phong_coeff * vec3f(0.0, 1.0, 1.0);
 }
 
 
@@ -379,6 +409,10 @@ fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 
     return vec3f(0.0, 0.0, 0.0);
 
+}
+
+fn glossy(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
+    return transmit(r, hit) + phong(r, hit);
 }
 
 fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
@@ -413,4 +447,8 @@ fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 
     *hit = hit_record;
     return vec3f(0.0, 0.0, 0.0);
+}
+
+fn error_shader() -> vec3f {
+    return vec3f(0.7, 0.0, 0.7);
 }
