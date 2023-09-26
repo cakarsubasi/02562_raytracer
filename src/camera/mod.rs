@@ -12,6 +12,23 @@ pub struct Camera {
     pub zfar: f32,
 }
 
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            // position the camera one unit up and 2 units back
+            // +z is out of the screen
+            eye: (2.0, 1.5, 2.0).into(),
+            target: (0.0, 0.5, 0.0).into(),
+            // which way is "up"
+            up: cgmath::Vector3::unit_y(),
+            constant: 1.0,
+            aspect: 1.0,
+            znear: 0.1,
+            zfar: 100.0,
+        }
+    }
+}
+
 pub struct CameraController {
     speed: f32,
     is_forward_pressed: bool,
@@ -32,24 +49,29 @@ impl CameraController {
     }
 
     pub fn handle_camera_commands(&mut self, command: &Command) -> bool {
-        match command {
-            Command::KeyEvent { key: VirtualKeyCode::W | VirtualKeyCode::Up } => {
-                self.is_forward_pressed = true;
-                true
+        if let Command::KeyEvent { key, state } = command {
+            let is_pressed = *state == ElementState::Pressed;
+            match key {
+                VirtualKeyCode::W | VirtualKeyCode::Up  => {
+                    self.is_forward_pressed = is_pressed;
+                    true
+                }
+                VirtualKeyCode::A | VirtualKeyCode::Left => {
+                    self.is_left_pressed = is_pressed;
+                    true
+                }
+                VirtualKeyCode::S | VirtualKeyCode::Down => {
+                    self.is_backward_pressed = is_pressed;
+                    true
+                }
+                VirtualKeyCode::D | VirtualKeyCode::Right => {
+                    self.is_right_pressed = is_pressed;
+                    true
+                }
+                _ => false,
             }
-            Command::KeyEvent { key: VirtualKeyCode::A | VirtualKeyCode::Left } => {
-                self.is_left_pressed = true;
-                true
-            }
-            Command::KeyEvent { key: VirtualKeyCode::S | VirtualKeyCode::Down } => {
-                self.is_backward_pressed = true;
-                true
-            }
-            Command::KeyEvent { key: VirtualKeyCode::D | VirtualKeyCode::Right } => {
-                self.is_right_pressed = true;
-                true
-            }
-            _ => false
+        } else {
+            false
         }
     }
 

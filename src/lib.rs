@@ -151,17 +151,15 @@ fn main_thread(
                         },
                     ..
                 } => {
-                    if state == ElementState::Pressed {
-                        use VirtualKeyCode::*;
-                        match key {
-                            Escape => {
-                                transmitter.send(Command::Shutdown { value: true }).unwrap();
-                                *control_flow = ControlFlow::Exit;
-                            }
-                            virtual_key_code => transmitter
-                                .send(Command::KeyEvent { key: virtual_key_code })
-                                .unwrap(),
+                    use VirtualKeyCode::*;
+                    match key {
+                        Escape => {
+                            transmitter.send(Command::Shutdown { value: true }).unwrap();
+                            *control_flow = ControlFlow::Exit;
                         }
+                        virtual_key_code => transmitter
+                            .send(Command::KeyEvent { key: virtual_key_code, state:state  })
+                            .unwrap(),
                     }
                 }
                 _ => (),
@@ -311,17 +309,12 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                 Err(TryRecvError::Empty) => { break }
                 Err(err) => panic!("encountered unexpected {err}"),
                 Ok(command) => {
-                    command_count+=1;
-                    if command_count == max_commands {
-                        command_count = 0;
-                        break;
-                    }
                     render_state.input_alt(&command);
                     match command {
                     Command::Resize { new_size } => {
                         render_state.resize(new_size);
                     }
-                    Command::KeyEvent { key } => {
+                    Command::KeyEvent { key, state: ElementState::Pressed } => {
                         match key {
                             VirtualKeyCode::Space => {
                                 let shader_module = 
@@ -336,7 +329,13 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                     }
                     Command::Shutdown { value } => { if value { break; }; },
                     _ => {}
-                }}
+                }
+                command_count+=1;
+                if command_count == max_commands {
+                    command_count = 0;
+                    break;
+                }
+            }
             }
         }
     }
