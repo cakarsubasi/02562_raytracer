@@ -1,7 +1,7 @@
 // Vertex shader
 
 struct Uniform {
-    view_proj: mat4x4<f32>, // 64 bytes
+    // view_proj: mat4x4<f32>, // 64 bytes
     camera_pos: vec3f, // 12 bytes
     camera_constant: f32, // 4 bytes
     camera_look_at: vec3f, // 12 bytes

@@ -1,34 +1,16 @@
 use winit::event::*;
 
+use crate::command::Command;
+
 pub struct Camera {
     pub eye: cgmath::Point3<f32>,
     pub target: cgmath::Point3<f32>,
     pub up: cgmath::Vector3<f32>,
     pub aspect: f32,
-    pub fovy: f32,
+    pub constant: f32,
     pub znear: f32,
     pub zfar: f32,
 }
-
-impl Camera {
-    pub fn build_view_projection_matrix(&self) -> cgmath::Matrix4<f32> {
-        // 1.
-        let view = cgmath::Matrix4::look_at_rh(self.eye, self.target, self.up);
-        // 2.
-        let proj = cgmath::perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
-
-        // 3.
-        return OPENGL_TO_WGPU_MATRIX * proj * view;
-    }
-}
-
-#[rustfmt::skip]
-pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 0.5, 0.5,
-    0.0, 0.0, 0.0, 1.0,
-);
 
 pub struct CameraController {
     speed: f32,
@@ -49,38 +31,25 @@ impl CameraController {
         }
     }
 
-    pub fn process_events(&mut self, event: &WindowEvent) -> bool {
-        match event {
-            WindowEvent::KeyboardInput {
-                input: KeyboardInput {
-                    state,
-                    virtual_keycode: Some(keycode),
-                    ..
-                },
-                ..
-            } => {
-                let is_pressed = *state == ElementState::Pressed;
-                match keycode {
-                    VirtualKeyCode::W | VirtualKeyCode::Up => {
-                        self.is_forward_pressed = is_pressed;
-                        true
-                    }
-                    VirtualKeyCode::A | VirtualKeyCode::Left => {
-                        self.is_left_pressed = is_pressed;
-                        true
-                    }
-                    VirtualKeyCode::S | VirtualKeyCode::Down => {
-                        self.is_backward_pressed = is_pressed;
-                        true
-                    }
-                    VirtualKeyCode::D | VirtualKeyCode::Right => {
-                        self.is_right_pressed = is_pressed;
-                        true
-                    }
-                    _ => false,
-                }
+    pub fn handle_camera_commands(&mut self, command: &Command) -> bool {
+        match command {
+            Command::KeyEvent { key: VirtualKeyCode::W | VirtualKeyCode::Up } => {
+                self.is_forward_pressed = true;
+                true
             }
-            _ => false,
+            Command::KeyEvent { key: VirtualKeyCode::A | VirtualKeyCode::Left } => {
+                self.is_left_pressed = true;
+                true
+            }
+            Command::KeyEvent { key: VirtualKeyCode::S | VirtualKeyCode::Down } => {
+                self.is_backward_pressed = true;
+                true
+            }
+            Command::KeyEvent { key: VirtualKeyCode::D | VirtualKeyCode::Right } => {
+                self.is_right_pressed = true;
+                true
+            }
+            _ => false
         }
     }
 

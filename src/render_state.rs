@@ -1,14 +1,12 @@
 use wgpu;
-use winit::window::Window;
+use winit::{window::{Window, WindowId}, event_loop::EventLoop};
 use crate::{
     camera::{Camera, CameraController},
-    data::{Uniform, Vertex}};
-use crate::data;
+    uniform::{self, Uniform, Vertex}, command::Command};
+
 
 use std::fs::File;
 use std::io::prelude::*;
-
-use winit::event::*;
 
 use wgpu::util::DeviceExt;
 
@@ -16,7 +14,7 @@ use std::error::Error;
 
 const CAMERA_SPEED: f32 = 0.05;
 
-pub struct State {
+pub struct RenderState {
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -32,6 +30,7 @@ pub struct State {
     uniform: Uniform,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
+    time_of_last_render: std::time::Instant,
     camera_controller: CameraController,
 }
 
@@ -74,14 +73,16 @@ impl std::fmt::Display for ShaderCreationError {
 }
 
 
-impl State {
-    pub async fn new(window: Window) -> Self {
+impl RenderState {
+    pub async fn new(_event_loop: &EventLoop<()>, window: winit::window::Window) -> Self {
+
+        //let window = WindowBuilder::new().build(&event_loop).unwrap();
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
+            backends: wgpu::Backends::VULKAN | wgpu::Backends::BROWSER_WEBGPU,
             dx12_shader_compiler: Default::default(),
         });
 
@@ -144,8 +145,8 @@ impl State {
             target: (0.0, 0.5, 0.0).into(),
             // which way is "up"
             up: cgmath::Vector3::unit_y(),
+            constant: 1.0,
             aspect: config.width as f32 / config.height as f32,
-            fovy: 45.0,
             znear: 0.1,
             zfar: 100.0,
         };
@@ -168,7 +169,7 @@ impl State {
         }
         );
 
-        let render_pipeline = State::create_render_pipeline(
+        let render_pipeline = RenderState::create_render_pipeline(
             &device,
             &render_pipeline_layout,
             &shader,
@@ -177,7 +178,7 @@ impl State {
         let vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(data::VERTICES),
+            contents: bytemuck::cast_slice(uniform::VERTICES),
             usage: wgpu::BufferUsages::VERTEX,
             }
         );
@@ -185,12 +186,14 @@ impl State {
         let index_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(data::INDICES),
+                contents: bytemuck::cast_slice(uniform::INDICES),
                 usage: wgpu::BufferUsages::INDEX,
             }
         );
 
-        let num_indices = data::INDICES.len() as u32;
+        let num_indices = uniform::INDICES.len() as u32;
+
+        let time_of_last_render = std::time::Instant::now();
 
         Self {
             window,
@@ -209,6 +212,7 @@ impl State {
             uniform_buffer,
             uniform_bind_group,
             camera_controller,
+            time_of_last_render,
         }
     }
 
@@ -288,6 +292,10 @@ impl State {
         &self.window
     }
 
+    pub fn window_id(&self) -> WindowId {
+        self.window().id()
+    }
+
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
@@ -298,48 +306,23 @@ impl State {
     }
 
     // return true to stop processing events, right now, always return false
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_controller.process_events(event);
-        match event {
-            WindowEvent::KeyboardInput { 
-                input:
-                KeyboardInput {
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                    ..
-                },
-            ..
-            } => {},
-            WindowEvent::KeyboardInput {
-                input: 
-                KeyboardInput {
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::Space),
-                    ..
-                },
-                ..
-            } => {
-                let shader_module = 
-                    pollster::block_on(self.create_shader_module("res/shaders/shader.wgsl"));
-                match shader_module {
-                    Ok(module) => self.recreate_render_pipeline(&module),
-                    Err(err) => {eprintln!("{err}")}
-                }
-
-            }
-            _ => {}
-        }
-
+    pub fn input_alt(&mut self, command: &Command) -> bool {
+        self.camera_controller.handle_camera_commands(command);
         false
     }
 
     pub fn update(&mut self) {
+        self.camera.aspect = self.aspect_ratio();
         self.camera_controller.update_camera(&mut self.camera);
-        self.uniform.update(&self.camera, self.aspect_ratio());
+        self.uniform.update(&self.camera);
         self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniform]));
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        let current_time: std::time::Instant = std::time::Instant::now();
+        let _time_delta: std::time::Duration = current_time - self.time_of_last_render;
+        self.time_of_last_render = current_time;
+
         let output = self.surface.get_current_texture()?;
 
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -385,6 +368,7 @@ impl State {
     }
 
     pub fn aspect_ratio(&self) -> f32 {
-        self.config.width as f32 / self.config.height as f32
+        //self.config.width as f32 / self.config.height as f32
+        self.window.inner_size().width as f32 / self.window.inner_size().height as f32
     }
 }

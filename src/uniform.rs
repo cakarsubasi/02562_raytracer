@@ -1,4 +1,3 @@
-use cgmath::SquareMatrix;
 use crate::camera::Camera;
 
 use wgpu::util::DeviceExt;
@@ -28,7 +27,7 @@ impl Vertex {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniform {
-    view_proj: [[f32; 4]; 4],
+    // view_proj: [[f32; 4]; 4],
     camera_pos: [f32; 3],
     //_padding0: f32,
     camera_constant: f32,
@@ -44,7 +43,7 @@ pub struct Uniform {
 impl Uniform {
     pub fn new() -> Self {
         Self {
-            view_proj: cgmath::Matrix4::identity().into(),
+            // view_proj: cgmath::Matrix4::identity().into(),
             camera_pos: [0.0, 0.0, 0.0],
             camera_look_at: [0.0, 0.0, 0.0],
             camera_up: [0.0, 0.0, 0.0],
@@ -96,13 +95,13 @@ impl Uniform {
         })
     }
 
-    pub fn update(&mut self, camera: &Camera, aspect_ratio: f32) {
-        self.view_proj = camera.build_view_projection_matrix().into();
+    pub fn update(&mut self, camera: &Camera) {
+        // self.view_proj = camera.build_view_projection_matrix().into();
         self.camera_pos = camera.eye.into();
         self.camera_look_at = camera.target.into();
         self.camera_up = camera.up.into();
-        self.camera_constant = 1.0;
-        self.aspect_ratio = aspect_ratio;
+        self.camera_constant = camera.constant;
+        self.aspect_ratio = camera.aspect;
     } 
 }
 
