@@ -279,7 +279,8 @@ pub async fn run() {
     let window_selector: WindowSelector =
         WindowSelector::new(control_panel.window_id, render_state.window_id());
 
-    let _render_thread = thread::spawn(move || rendering_thread(&mut render_state, receiver));
+    let _render_thread = 
+        thread::Builder::new().name("Render Thread".into()).spawn(move || rendering_thread(&mut render_state, receiver));
 
     main_thread(
         gpu_handles,

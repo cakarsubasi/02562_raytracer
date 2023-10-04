@@ -112,11 +112,13 @@ impl ControlPanel {
             .unwrap();
     }
 
-    pub fn resize(&mut self, device: &wgpu::Device, size: winit::dpi::PhysicalSize<u32>) {
-        self.config.width = size.width;
-        self.config.height = size.height;
-        self.surface.configure(device, &self.config);
-        self.window.request_redraw();
+    pub fn resize(&mut self, device: &wgpu::Device, new_size: winit::dpi::PhysicalSize<u32>) {
+        if new_size.width > 0 && new_size.height > 0 {
+            self.config.width = new_size.width;
+            self.config.height = new_size.height;
+            self.surface.configure(device, &self.config);
+            self.window.request_redraw();
+        }
     }
 
     pub fn get_current_texture(&mut self) -> wgpu::SurfaceTexture {
