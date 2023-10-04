@@ -26,6 +26,8 @@ egui_winit_platform = "0.19.0"
 egui_wgpu_backend = "0.25.0"
 crossbeam-channel = "0.5.8"
 rfd = "0.12.0"
+obj = "0.10.2"
+anyhow = "1.0.75"
 
 
 

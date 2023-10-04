@@ -28,12 +28,18 @@ const MAX_DEPTH: i32 = 10;
 
 @group(0) @binding(0)
 var<uniform> uniforms: Uniform;
-
 @group(0) @binding(1)
 var<uniform> selection: u32;
 
 @group(1) @binding(0)
-var<uniform> hello: f32;
+var sampler0: sampler;
+@group(1) @binding(1)
+var texture0: texture_2d<f32>;
+
+@group(2) @binding(0)
+var<storage> vertexBuffer: array<vec3f>;
+@group(2) @binding(1)
+var<storage> indexBuffer: array<vec3u>;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -182,12 +188,19 @@ fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool
     var has_hit = false;
 
     has_hit = has_hit || intersect_plane(r, hit, vec3f(0.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0));
+    //has_hit = has_hit || intersect_sphere(r, hit, vec3f(0.0, 0.5, 0.0), 0.3);
+
     let arr = array<vec3f, 3>(vec3f(-0.2, 0.1, 0.9), vec3f(0.2, 0.1, 0.9), vec3f(-0.2, 0.1, -0.1));
     has_hit = has_hit || intersect_triangle(r, hit, arr);
-    has_hit = has_hit || intersect_sphere(r, hit, vec3f(0.0, 0.5, 0.0), 0.3);
     has_hit = has_hit || intersect_sphere(r, hit, arr[0], 0.05);
     has_hit = has_hit || intersect_sphere(r, hit, arr[1], 0.05);
     has_hit = has_hit || intersect_sphere(r, hit, arr[2], 0.05);
+
+    let arr2 = array<vec3f, 3>(vec3f(0.1, 0.1, 0.1), vec3f(0.1, 0.5, 0.1), vec3f(0.6, 0.5, 0.1));
+    has_hit = has_hit || intersect_triangle(r, hit, arr2);
+    has_hit = has_hit || intersect_sphere(r, hit, arr2[0], 0.05);
+    has_hit = has_hit || intersect_sphere(r, hit, arr2[1], 0.05);
+    has_hit = has_hit || intersect_sphere(r, hit, arr2[2], 0.05);
     return has_hit;
 }
 
@@ -203,7 +216,7 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, positio
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
     (*hit).normal = normal;
-    (*hit).diffuse = vec3f(0.1, 0.7, 0.0);
+    (*hit).base_color = vec3f(0.1, 0.7, 0.0);
     (*hit).shader = SHADER_TYPE_LAMBERTIAN;
     return true;
 }
@@ -218,8 +231,8 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     let o_to_v0 = v[0] - o;
     let normal = cross(e0, e1);
     // there is an issue with this
-    let nom = -cross(o_to_v0, w_i);
-    let denom = -dot(w_i, normal);
+    let nom = cross(o_to_v0, w_i);
+    let denom = dot(w_i, normal);
     // The minuses shouldn't be needed but are
 
     let beta = dot(nom, e1) / denom;
@@ -244,7 +257,7 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
     (*hit).normal = normalize(normal);
-    (*hit).diffuse = vec3f(0.4, 0.3, 0.2);
+    (*hit).base_color = vec3f(0.4, 0.3, 0.2);
     (*hit).shader = SHADER_TYPE_LAMBERTIAN;
     return true;
 }
@@ -274,7 +287,7 @@ fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center
     let normal = normalize(pos - center);
     (*hit).position = pos;
     (*hit).normal = normal;
-    (*hit).diffuse = vec3f(0.0, 0.5, 0.0);
+    (*hit).base_color = vec3f(0.0, 0.5, 0.0);
 
     let shader_type = SHADER_TYPE_NORMAL;
     if (shader_type == SHADER_TYPE_TRANSMIT) {
@@ -355,17 +368,17 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     var ray = ray_init(ray_dir, ray_orig);
 
     let blocked = intersect_scene(&ray, hit);
-    let ambient = hit_record.ambient;
-    var diffuse = vec3f(0.0);
+    let ambient = hit_record.base_color;
+    var diffuse = hit_record.base_color * light_diffuse_contribution(light, normal, hit_record.specular);
 
     // ambient only
     if (blocked) {
-        
+        return ambient * 0.1;
     } else { // ambient and diffuse
-        diffuse = light_diffuse_contribution(light, normal, hit_record.specular);
+        return diffuse_and_ambient(diffuse, ambient);
     }
 
-    return diffuse * diffuse_and_ambient(hit_record.diffuse, ambient);
+    return diffuse_and_ambient(diffuse, ambient);
 }
 
 fn light_diffuse_contribution(light: Light, normal: vec3f, specular: f32) -> vec3f {
@@ -377,7 +390,7 @@ fn light_diffuse_contribution(light: Light, normal: vec3f, specular: f32) -> vec
 }
 
 fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
-    return (ambient * 0.1 + diffuse * 0.9);
+    return 0.9 * diffuse + 0.1 * ambient;
 } 
 
 fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 

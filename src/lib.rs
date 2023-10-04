@@ -4,6 +4,7 @@ mod control_panel;
 mod uniform;
 mod gpu_handles;
 mod render_state;
+mod texture;
 
 use std::{time::Instant, thread};
 

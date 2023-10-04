@@ -1,8 +1,9 @@
 use wgpu;
 use winit::{window::{Window, WindowId}, event_loop::EventLoop};
 use crate::{
+    texture,
     camera::{Camera, CameraController},
-    uniform::{self, Uniform, Vertex}, command::Command};
+    uniform::{self, Uniform, Vertex, BindGroup}, command::Command};
 
 
 use std::fs::File;
@@ -30,6 +31,7 @@ pub struct RenderState {
     uniform: Uniform,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
+    texture_bind_group: wgpu::BindGroup,
     time_of_last_render: std::time::Instant,
     camera_controller: CameraController,
 }
@@ -153,9 +155,13 @@ impl RenderState {
 
         // Uniform variables
         let uniform = Uniform::new();
-        let uniform_buffer = uniform.create_buffer(&device);
-        let uniform_bind_group_layout = Uniform::create_bind_group_layout(&device);
-        let uniform_bind_group = Uniform::create_bind_group(&device, &uniform_bind_group_layout, &uniform_buffer);
+        let uniform_bg = uniform.create_bind_group(&device);
+        let (uniform_buffer, uniform_bind_group_layout, uniform_bind_group) = uniform_bg;
+
+        let texture_bytes = include_bytes!("../res/textures/grass.jpg");
+        let texture = texture::Texture::from_bytes(&device, &queue, texture_bytes, "grass.jpg").unwrap();
+        let texture_bg = texture.create_bind_group(&device);
+        let (texture_bind_group_layout, texture_bind_group) = texture_bg;
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
@@ -164,7 +170,7 @@ impl RenderState {
 
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&uniform_bind_group_layout],
+            bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout],
             push_constant_ranges: &[],
         }
         );
@@ -211,6 +217,7 @@ impl RenderState {
             uniform,
             uniform_buffer,
             uniform_bind_group,
+            texture_bind_group,
             camera_controller,
             time_of_last_render,
         }
@@ -357,6 +364,7 @@ impl RenderState {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
         render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         
         drop(render_pass);
