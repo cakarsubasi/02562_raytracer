@@ -5,19 +5,29 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.dev]
+incremental = true
+
+[profile.release]
+incremental = true
+
 [dependencies]
 cfg-if = "1"
 pollster = "0.3"
-
 winit = "0.28"
 env_logger = "0.10"
 log = "0.4"
 wgpu = "0.17"
-
 cgmath = "0.18"
-
 bytemuck = { version = "1.12", features = [ "derive" ] }
-notify = "6.1.1"
+# notify = "6.1.1"
+egui = "0.22"
+egui_winit_platform = "0.19.0"
+egui_wgpu_backend = "0.25.0"
+crossbeam-channel = "0.5.8"
+rfd = "0.12.0"
+
+
 
 [dependencies.image]
 version = "0.24"
@@ -37,5 +47,11 @@ web-sys = { version = "0.3", features = [
     "Element",
 ]}
 
+[[bin]]
+name = "raytracer_wgpu"
+path = "src/main.rs"
+
 [lib]
+name = "raytracer_wgpu_lib"
+path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
