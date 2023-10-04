@@ -20,6 +20,7 @@ const SHADER_TYPE_PHONG: u32 = 1u;
 const SHADER_TYPE_MIRROR: u32 = 2u;
 const SHADER_TYPE_TRANSMIT: u32 = 3u;
 const SHADER_TYPE_GLOSSY: u32 = 4u;
+const SHADER_TYPE_NORMAL: u32 = 5u;
 const SHADER_TYPE_NO_RENDER: u32 = 255u;
 const SHADER_TYPE_DEFAULT: u32 = 0u;
 
@@ -183,10 +184,10 @@ fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool
     has_hit = has_hit || intersect_plane(r, hit, vec3f(0.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0));
     let arr = array<vec3f, 3>(vec3f(-0.2, 0.1, 0.9), vec3f(0.2, 0.1, 0.9), vec3f(-0.2, 0.1, -0.1));
     has_hit = has_hit || intersect_triangle(r, hit, arr);
-    //let arr = array<vec3f, 3>(vec3f(1.0, 0.1, 0.0), vec3f(0.0, 0.1, 0.0), vec3f(0.0, 0.1, 1.0));
-    let arr2 = array<vec3f, 3>(vec3f(-0.2, 0.1, 0.9), vec3f(-0.6, 0.1, 0.9), vec3f(-0.2, 0.1, -0.1));
-    has_hit = has_hit || intersect_triangle(r, hit, arr2);
-    has_hit = has_hit || intersect_sphere(r, hit, vec3f(0.0, 0.5, 0.0), 0.1);
+    has_hit = has_hit || intersect_sphere(r, hit, vec3f(0.0, 0.5, 0.0), 0.3);
+    has_hit = has_hit || intersect_sphere(r, hit, arr[0], 0.05);
+    has_hit = has_hit || intersect_sphere(r, hit, arr[1], 0.05);
+    has_hit = has_hit || intersect_sphere(r, hit, arr[2], 0.05);
     return has_hit;
 }
 
@@ -216,12 +217,13 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     let e1 = v[2] - v[0];
     let o_to_v0 = v[0] - o;
     let normal = cross(e0, e1);
-    let nom = cross(o_to_v0, w_i);
-    let denom = dot(w_i, normal);
-
+    // there is an issue with this
+    let nom = -cross(o_to_v0, w_i);
+    let denom = -dot(w_i, normal);
+    // The minuses shouldn't be needed but are
 
     let beta = dot(nom, e1) / denom;
-    if (beta <= 0.0) {
+    if (beta < 0.0) {
         return false;
     }
     let gamma = -dot(nom, e0) / denom;
@@ -274,7 +276,7 @@ fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center
     (*hit).normal = normal;
     (*hit).diffuse = vec3f(0.0, 0.5, 0.0);
 
-    let shader_type = SHADER_TYPE_TRANSMIT;
+    let shader_type = SHADER_TYPE_NORMAL;
     if (shader_type == SHADER_TYPE_TRANSMIT) {
         setup_shader_transmissive(r, hit, 1.4);
     } else if (shader_type == SHADER_TYPE_GLOSSY) {
@@ -332,6 +334,9 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
         }
         case 4u: {
             color = glossy(r, hit);
+        }
+        case 5u: {
+            color = shade_normal(r, hit);
         }
         default: {
             color = error_shader();
@@ -453,6 +458,10 @@ fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 
     *hit = hit_record;
     return vec3f(0.0, 0.0, 0.0);
+}
+
+fn shade_normal(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
+    return ((*hit).normal + 1.0) * 0.5;
 }
 
 fn error_shader() -> vec3f {
