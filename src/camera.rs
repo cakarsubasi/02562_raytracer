@@ -2,10 +2,12 @@ use winit::event::*;
 
 use crate::command::Command;
 
+use cgmath::{Vector3, Point3};
+
 pub struct Camera {
-    pub eye: cgmath::Point3<f32>,
-    pub target: cgmath::Point3<f32>,
-    pub up: cgmath::Vector3<f32>,
+    pub eye: Point3<f32>,
+    pub target: Point3<f32>,
+    pub up: Vector3<f32>,
     pub aspect: f32,
     pub constant: f32,
     pub znear: f32,
@@ -26,6 +28,21 @@ impl Default for Camera {
             znear: 0.1,
             zfar: 100.0,
         }
+    }
+}
+
+impl Camera {
+    fn translate(&mut self, translation: &Vector3<f32>) {
+        self.eye += *translation;
+        self.target += *translation;
+    }
+
+    fn orbit_horizontal(&mut self, orbit: f32) {
+        todo!();
+    }
+
+    fn rotate(&mut self, rotation: &Vector3<f32>) {
+        todo!();
     }
 }
 
