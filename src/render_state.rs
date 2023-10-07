@@ -5,13 +5,13 @@ use crate::{
     camera::{Camera, CameraController},
     uniform::{self, Uniform, Vertex, BindGroup}, command::Command};
 
+use anyhow::*;
+
 
 use std::fs::File;
 use std::io::prelude::*;
 
 use wgpu::util::DeviceExt;
-
-use std::error::Error;
 
 const CAMERA_SPEED: f32 = 0.05;
 
@@ -35,45 +35,6 @@ pub struct RenderState {
     time_of_last_render: std::time::Instant,
     camera_controller: CameraController,
 }
-
-#[derive(Debug)]
-pub enum ShaderCreationError {
-    WgpuError(wgpu::Error),
-    IOError(std::io::Error),
-}
-
-impl From<std::io::Error> for ShaderCreationError {
-    fn from(value: std::io::Error) -> Self {
-        ShaderCreationError::IOError(value)
-    }
-}
-
-impl Error for ShaderCreationError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            ShaderCreationError::WgpuError(internal) => Some(internal),
-            ShaderCreationError::IOError(internal) => Some(internal),
-        }
-    }
-
-    fn description(&self) -> &str {
-        "description() is deprecated; use Display"
-    }
-
-    fn cause(&self) -> Option<&dyn Error> {
-        self.source()
-    }
-}
-
-impl std::fmt::Display for ShaderCreationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::WgpuError(err) => { f.write_fmt(format_args!("Internal WGPU Error: {err}"))}
-            Self::IOError(err) => err.fmt(f),
-        }
-    }
-}
-
 
 impl RenderState {
     pub async fn new(_event_loop: &EventLoop<()>, window: winit::window::Window) -> Self {
@@ -227,7 +188,7 @@ impl RenderState {
         self.render_pipeline = Self::create_render_pipeline(&self.device, &self.render_pipeline_layout, shader, &self.config);
     }
 
-    pub async fn create_shader_module(&self, shader_location: &str) -> Result<wgpu::ShaderModule, ShaderCreationError> {
+    pub async fn create_shader_module(&self, shader_location: &str) -> Result<wgpu::ShaderModule> {
         let mut file = File::open::<std::path::PathBuf>(shader_location.into())?;
         let mut shader_source = String::new();
         file.read_to_string(&mut shader_source)?;
@@ -237,13 +198,12 @@ impl RenderState {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(shader_source.as_str().into()),
         });
-        let shader_result = 
-        match self.device.pop_error_scope().await {
-            None => Ok(shader_maybe),
-            Some(err) => Err(ShaderCreationError::WgpuError(err)),
-        };
+        let error_maybe = self.device.pop_error_scope().await;
+        if let Some(err) = error_maybe {
+            return Err(anyhow!(err.to_string()));
+        }
 
-        shader_result
+        Ok(shader_maybe)
     }
 
     pub fn create_render_pipeline(
@@ -372,7 +332,7 @@ impl RenderState {
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
-        Ok(())
+        std::result::Result::Ok(())
     }
 
     pub fn aspect_ratio(&self) -> f32 {
