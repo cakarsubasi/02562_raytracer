@@ -1,12 +1,12 @@
 mod camera;
 mod command;
 mod control_panel;
-mod uniform;
 mod gpu_handles;
 mod render_state;
 mod texture;
+mod uniform;
 
-use std::{time::Instant, thread};
+use std::{thread, time::Instant};
 
 use crate::{control_panel::ControlPanel, render_state::RenderState};
 
@@ -159,7 +159,10 @@ fn main_thread(
                             *control_flow = ControlFlow::Exit;
                         }
                         virtual_key_code => transmitter
-                            .send(Command::KeyEvent { key: virtual_key_code, state:state  })
+                            .send(Command::KeyEvent {
+                                key: virtual_key_code,
+                                state: state,
+                            })
                             .unwrap(),
                     }
                 }
@@ -268,9 +271,9 @@ pub async fn run() {
         .unwrap();
 
     render_state_window.set_outer_position(winit::dpi::PhysicalPosition::new(
-            2*WINDOW_PADDING + CONTROL_WINDOW_SIZE.width,
-            WINDOW_PADDING,
-        ));
+        2 * WINDOW_PADDING + CONTROL_WINDOW_SIZE.width,
+        WINDOW_PADDING,
+    ));
 
     let mut render_state = RenderState::new(&event_loop, render_state_window).await;
 
@@ -280,8 +283,9 @@ pub async fn run() {
     let window_selector: WindowSelector =
         WindowSelector::new(control_panel.window_id, render_state.window_id());
 
-    let _render_thread = 
-        thread::Builder::new().name("Render Thread".into()).spawn(move || rendering_thread(&mut render_state, receiver));
+    let _render_thread = thread::Builder::new()
+        .name("Render Thread".into())
+        .spawn(move || rendering_thread(&mut render_state, receiver));
 
     main_thread(
         gpu_handles,
@@ -308,36 +312,55 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
         }
         loop {
             match receiver.try_recv() {
-                Err(TryRecvError::Empty) => { break }
+                Err(TryRecvError::Empty) => break,
                 Err(err) => panic!("encountered unexpected {err}"),
                 Ok(command) => {
                     render_state.input_alt(&command);
                     match command {
-                    Command::Resize { new_size } => {
-                        render_state.resize(new_size);
-                    }
-                    Command::KeyEvent { key, state: ElementState::Pressed } => {
-                        match key {
+                        Command::Resize { new_size } => {
+                            render_state.resize(new_size);
+                        }
+                        Command::KeyEvent {
+                            key,
+                            state: ElementState::Pressed,
+                        } => match key {
                             VirtualKeyCode::Space => {
-                                let shader_module = 
-                                pollster::block_on(render_state.create_shader_module("res/shaders/shader.wgsl"));
-                            match shader_module {
-                                Ok(module) => render_state.recreate_render_pipeline(&module),
-                                Err(err) => {eprintln!("{err}")}
-                            }
+                                let shader_module = pollster::block_on(
+                                    render_state.create_shader_module("src/shader.wgsl"),
+                                );
+                                match shader_module {
+                                    Ok(module) => render_state.recreate_render_pipeline(&module),
+                                    Err(err) => {
+                                        eprintln!("{err}")
+                                    }
+                                }
                             }
                             _ => {}
+                        },
+                        Command::Shutdown { value } => {
+                            if value {
+                                break;
+                            };
                         }
+                        Command::LoadShader { shader_path } => {
+                            let shader_module = pollster::block_on(
+                                render_state.create_shader_module(&shader_path),
+                            );
+                            match shader_module {
+                                Ok(module) => render_state.recreate_render_pipeline(&module),
+                                Err(err) => {
+                                    eprintln!("{err}")
+                                }
+                            }
+                        }
+                        _ => {}
                     }
-                    Command::Shutdown { value } => { if value { break; }; },
-                    _ => {}
+                    command_count += 1;
+                    if command_count == max_commands {
+                        command_count = 0;
+                        break;
+                    }
                 }
-                command_count+=1;
-                if command_count == max_commands {
-                    command_count = 0;
-                    break;
-                }
-            }
             }
         }
     }

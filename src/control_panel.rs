@@ -1,6 +1,6 @@
 // Heavily based on: https://github.com/hasenbanck/egui_example/blob/master/src/main.rs
 
-use std::{iter, time::Instant};
+use std::{iter, time::Instant, env};
 
 use crossbeam_channel::Sender;
 use egui::{ClippedPrimitive, Context, FontDefinitions, FullOutput, Response, ScrollArea, Ui};
@@ -261,13 +261,18 @@ impl ControlPanel {
                         };
                     });
 
-                    // Load scene section. You'll have to fill out this
-                    // functionality yourself.
+                    // Load different shaders
                     ui.horizontal(|ui: &mut Ui| {
-                        if ui.button("Load Scene").changed() {
-
+                        let load_scene_button = ui.button("Load Scene");
+                
+                        if load_scene_button.changed() {
                             *redraw_gui = true;
                         };
+
+                        if load_scene_button.clicked() {
+                            commands.send(Command::LoadShader { shader_path: self.scene_path.clone() }).unwrap();
+                        }
+
                         ui.label("Path");
 
                         let text_edit_singleline_response: Response =
@@ -285,7 +290,11 @@ impl ControlPanel {
                     // sets the scene_path to that path.
                     ui.horizontal(|ui: &mut Ui| {
                         if ui.button("Open file..").clicked() {
-                            if let Some(path) = rfd::FileDialog::new().pick_file() {
+                            if let Some(path) = 
+                            rfd::FileDialog::new()
+                            .set_directory(env::current_dir().unwrap())
+                            .add_filter("WGSL Shaders (*.wgsl)", &["wgsl"])
+                            .pick_file() {
                                 self.scene_path = path.display().to_string();
                             }
                         }
