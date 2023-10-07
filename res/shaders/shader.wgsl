@@ -10,7 +10,7 @@ struct Uniform {
 };
 
 const PI = 3.14159265359;
-const ETA = 0.00001;
+const ETA = 0.000001;
 
 const BACKGROUND_COLOR: vec3f = vec3f(0.0, 0.0, 0.5);
 
@@ -91,8 +91,6 @@ fn light_init() -> Light {
     );
 }
 
-
-
 struct HitRecord {
     has_hit: bool,
     depth: i32,
@@ -104,6 +102,7 @@ struct HitRecord {
     diffuse: vec3f,
     // shader properties
     shader: ShaderType,
+    use_texture: bool, // 
     base_color: vec3f,
     ior1_over_ior2: f32,
     specular: f32,
@@ -122,6 +121,7 @@ fn hit_record_init() -> HitRecord {
         vec3f(0.0),
         // shader properties
         SHADER_TYPE_NO_RENDER,
+        false,
         vec3f(0.0),
         1.0,
         0.0,
@@ -150,7 +150,7 @@ fn get_camera_ray(uv: vec2f) -> Ray {
     let b1 = normalize(cross(v, u));
     let b2 = cross(b1, v);
 
-    let q = b1 * uv.x * aspect + b2 * uv.y + v*d;
+    let q = normalize(b1 * uv.x * aspect + b2 * uv.y + v*d);
 
     let ray = ray_init(q, e);
     return ray;
@@ -187,9 +187,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
     var has_hit = false;
 
-    has_hit = has_hit || intersect_plane(r, hit, vec3f(0.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0));
-    //has_hit = has_hit || intersect_sphere(r, hit, vec3f(0.0, 0.5, 0.0), 0.3);
-
     let arr = array<vec3f, 3>(vec3f(-0.2, 0.1, 0.9), vec3f(0.2, 0.1, 0.9), vec3f(-0.2, 0.1, -0.1));
     has_hit = has_hit || intersect_triangle(r, hit, arr);
     has_hit = has_hit || intersect_sphere(r, hit, arr[0], 0.05);
@@ -201,6 +198,9 @@ fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool
     has_hit = has_hit || intersect_sphere(r, hit, arr2[0], 0.05);
     has_hit = has_hit || intersect_sphere(r, hit, arr2[1], 0.05);
     has_hit = has_hit || intersect_sphere(r, hit, arr2[2], 0.05);
+
+    has_hit = has_hit || intersect_plane(r, hit, vec3f(0.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0));
+    //has_hit = has_hit || intersect_sphere(r, hit, vec3f(0.0, 0.5, 0.0), 0.3);
     return has_hit;
 }
 
@@ -234,12 +234,16 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     let nom = cross(o_to_v0, w_i);
     let denom = dot(w_i, normal);
     // The minuses shouldn't be needed but are
+    var eta = ETA;
+    if (denom > 0.0) {
+        eta = eta * -1.0;
+    }
 
-    let beta = dot(nom, e1) / denom;
+    let beta = dot(nom, e1) / (denom + eta);
     if (beta < 0.0) {
         return false;
     }
-    let gamma = -dot(nom, e0) / denom;
+    let gamma = -dot(nom, e0) / (denom + eta);
     if (gamma < 0.0) {
         return false;
     }
