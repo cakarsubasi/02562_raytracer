@@ -21,6 +21,7 @@ const SHADER_TYPE_MIRROR: u32 = 2u;
 const SHADER_TYPE_TRANSMIT: u32 = 3u;
 const SHADER_TYPE_GLOSSY: u32 = 4u;
 const SHADER_TYPE_NORMAL: u32 = 5u;
+const SHADER_TYPE_BASECOLOR: u32 = 6u;
 const SHADER_TYPE_NO_RENDER: u32 = 255u;
 const SHADER_TYPE_DEFAULT: u32 = 0u;
 
@@ -28,18 +29,24 @@ const MAX_DEPTH: i32 = 10;
 
 @group(0) @binding(0)
 var<uniform> uniforms: Uniform;
+// selection TODO
 @group(0) @binding(1)
 var<uniform> selection: u32;
+// Stratified jitter sampling array TODO
+@group(0) @binding(2)
+var<storage> jitter: array<vec2f>;
 
 @group(1) @binding(0)
 var sampler0: sampler;
 @group(1) @binding(1)
 var texture0: texture_2d<f32>;
 
+// GPU will always align to 16, so this does not waste space
 @group(2) @binding(0)
-var<storage> vertexBuffer: array<vec3f>;
+var<storage> vertexBuffer: array<vec4f>;
+// GPU will always align to 16, so this does not waste space
 @group(2) @binding(1)
-var<storage> indexBuffer: array<vec3u>;
+var<storage> indexBuffer: array<vec4u>;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -102,7 +109,8 @@ struct HitRecord {
     diffuse: vec3f,
     // shader properties
     shader: ShaderType,
-    use_texture: bool, // 
+    use_texture: bool, //
+    uv0: vec2f,
     base_color: vec3f,
     ior1_over_ior2: f32,
     specular: f32,
@@ -122,6 +130,7 @@ fn hit_record_init() -> HitRecord {
         // shader properties
         SHADER_TYPE_NO_RENDER,
         false,
+        vec2f(0.0),
         vec3f(0.0),
         1.0,
         0.0,
@@ -167,10 +176,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var hit = hit_record_init();
 
     var result = vec3f(0.0);
+    var result_textured = vec3f(1.0);
     // each loop is one bounce
     for (var i = 0; i < max_depth; i++) {
         if (intersect_scene(&r, &hit)) {
             result += shade(&r, &hit);
+            if (hit.use_texture) {
+                result_textured = texture_sample(&hit);
+            }
         } else {
             result += bgcolor.rgb; break;
         }
@@ -179,27 +192,37 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             break;
         }
     }
-
+    result = result * result_textured;
     //return vec4f(result, bgcolor.a);
     return vec4f(pow(result, vec3f(1.0/1.0)), bgcolor.a);
 }
 
+fn texture_sample(hit: ptr<function, HitRecord>) -> vec3f {
+    // Note that we are ignoring the potential alpha channel within the texture here
+    // TODO: Might want to multiply alpha here
+    return textureSample(texture0, sampler0, (*hit).uv0).xyz;
+}
+
 fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
     var has_hit = false;
+    let num_of_tris = arrayLength(&indexBuffer);
+    for (var i = 0u; i < num_of_tris; i++) {
+        has_hit = has_hit || intersect_triangle_indexed(r, hit, i);
+    }
 
-    let arr = array<vec3f, 3>(vec3f(-0.2, 0.1, 0.9), vec3f(0.2, 0.1, 0.9), vec3f(-0.2, 0.1, -0.1));
-    has_hit = has_hit || intersect_triangle(r, hit, arr);
-    has_hit = has_hit || intersect_sphere(r, hit, arr[0], 0.05);
-    has_hit = has_hit || intersect_sphere(r, hit, arr[1], 0.05);
-    has_hit = has_hit || intersect_sphere(r, hit, arr[2], 0.05);
+    //let arr = array<vec3f, 3>(vec3f(-0.2, 0.1, 0.9), vec3f(0.2, 0.1, 0.9), vec3f(-0.2, 0.1, -0.1));
+    //has_hit = has_hit || intersect_triangle(r, hit, arr);
+    //has_hit = has_hit || intersect_sphere(r, hit, arr[0], 0.05);
+    //has_hit = has_hit || intersect_sphere(r, hit, arr[1], 0.05);
+    //has_hit = has_hit || intersect_sphere(r, hit, arr[2], 0.05);
+//
+    //let arr2 = array<vec3f, 3>(vec3f(0.1, 0.1, 0.1), vec3f(0.1, 0.5, 0.1), vec3f(0.6, 0.5, 0.1));
+    //has_hit = has_hit || intersect_triangle(r, hit, arr2);
+    //has_hit = has_hit || intersect_sphere(r, hit, arr2[0], 0.05);
+    //has_hit = has_hit || intersect_sphere(r, hit, arr2[1], 0.05);
+    //has_hit = has_hit || intersect_sphere(r, hit, arr2[2], 0.05);
 
-    let arr2 = array<vec3f, 3>(vec3f(0.1, 0.1, 0.1), vec3f(0.1, 0.5, 0.1), vec3f(0.6, 0.5, 0.1));
-    has_hit = has_hit || intersect_triangle(r, hit, arr2);
-    has_hit = has_hit || intersect_sphere(r, hit, arr2[0], 0.05);
-    has_hit = has_hit || intersect_sphere(r, hit, arr2[1], 0.05);
-    has_hit = has_hit || intersect_sphere(r, hit, arr2[2], 0.05);
-
-    has_hit = has_hit || intersect_plane(r, hit, vec3f(0.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0));
+    //has_hit = has_hit || intersect_plane(r, hit, vec3f(0.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0));
     //has_hit = has_hit || intersect_sphere(r, hit, vec3f(0.0, 0.5, 0.0), 0.3);
     return has_hit;
 }
@@ -218,6 +241,8 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, positio
     (*hit).normal = normal;
     (*hit).base_color = vec3f(0.1, 0.7, 0.0);
     (*hit).shader = SHADER_TYPE_LAMBERTIAN;
+    (*hit).use_texture = true;
+    (*hit).uv0 = pos.xy;
     return true;
 }
 
@@ -266,6 +291,14 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     return true;
 }
 
+fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: u32) -> bool {
+    let v1 = indexBuffer[v].x;
+    let v2 = indexBuffer[v].y;
+    let v3 = indexBuffer[v].z;
+    let arr = array<vec3f, 3>(vertexBuffer[v1].xyz, vertexBuffer[v2].xyz, vertexBuffer[v3].xyz);
+    return intersect_triangle(r, hit, arr);
+}
+
 fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center: vec3f, radius: f32) -> bool {
     let ray = *r;
     let oc = ray.origin - center;
@@ -293,7 +326,7 @@ fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center
     (*hit).normal = normal;
     (*hit).base_color = vec3f(0.0, 0.5, 0.0);
 
-    let shader_type = SHADER_TYPE_NORMAL;
+    let shader_type = SHADER_TYPE_PHONG;
     if (shader_type == SHADER_TYPE_TRANSMIT) {
         setup_shader_transmissive(r, hit, 1.4);
     } else if (shader_type == SHADER_TYPE_GLOSSY) {
@@ -354,6 +387,9 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
         }
         case 5u: {
             color = shade_normal(r, hit);
+        }
+        case 6u: {
+            color = shade_base_color(r, hit);
         }
         default: {
             color = error_shader();
@@ -479,6 +515,10 @@ fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 
 fn shade_normal(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     return ((*hit).normal + 1.0) * 0.5;
+}
+
+fn shade_base_color(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
+    return (*hit).base_color;
 }
 
 fn error_shader() -> vec3f {

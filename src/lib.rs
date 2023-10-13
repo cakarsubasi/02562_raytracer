@@ -5,6 +5,8 @@ mod gpu_handles;
 mod render_state;
 mod texture;
 mod uniform;
+mod mesh;
+//mod data_structures;
 
 use std::{thread, time::Instant};
 
@@ -15,7 +17,7 @@ Boilerplate code from https://sotrh.github.io/learn-wgpu/
 */
 
 use command::Command;
-use crossbeam_channel::{unbounded, Receiver, Sender, TryRecvError};
+use crossbeam_channel::{unbounded, Receiver, Sender, RecvTimeoutError};
 use gpu_handles::GPUHandles;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -299,21 +301,25 @@ pub async fn run() {
 fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>) {
     let mut command_count = 0;
     let max_commands = 5;
+    let mut should_render = true;
     loop {
-        render_state.update();
-        match render_state.render() {
-            Ok(_) => {}
-            // Reconfigure the surface if lost
-            Err(wgpu::SurfaceError::Lost) => render_state.resize(render_state.size),
-            // The system is out of memory, we should probably quit
-            Err(wgpu::SurfaceError::OutOfMemory) => break,
-            // All other errors (Outdated, Timeout) should be resolved by the next frame
-            Err(e) => eprintln!("{:?}", e),
+        if should_render {
+            match render_state.render() {
+                Ok(_) => {}
+                // Reconfigure the surface if lost
+                Err(wgpu::SurfaceError::Lost) => render_state.resize(render_state.size),
+                // The system is out of memory, we should probably quit
+                Err(wgpu::SurfaceError::OutOfMemory) => break,
+                // All other errors (Outdated, Timeout) should be resolved by the next frame
+                Err(e) => eprintln!("{:?}", e),
+            }
         }
+        render_state.update();
         loop {
-            match receiver.try_recv() {
-                Err(TryRecvError::Empty) => break,
-                Err(err) => panic!("encountered unexpected {err}"),
+            // evil 60 fps hack (note: I will change this but this is a dirty way of preventing GPU from doing too much work)
+            match receiver.recv_timeout(std::time::Duration::from_millis(16)) {
+                Err(RecvTimeoutError::Timeout) => break,
+                Err(_err) => break,
                 Ok(command) => {
                     render_state.input_alt(&command);
                     match command {
@@ -352,6 +358,9 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                                     eprintln!("{err}")
                                 }
                             }
+                        }
+                        Command::Render { value } => {
+                            should_render = value;
                         }
                         _ => {}
                     }
