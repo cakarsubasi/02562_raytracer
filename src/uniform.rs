@@ -107,9 +107,28 @@ impl BindGroup for Uniform {
     }
 }
 
-struct Model {}
+#[allow(dead_code)]
 
-impl Model {}
+//fn compute_jitters(jitter: f32, pixel_size: f32, subdivs: u32) -> Vec<(f32, f32)> {
+//    assert!(subdivs <= 10);
+//    let mut jitter_vectors = vec![];
+//    use rand::prelude::*;
+//    let mut rng = rand::thread_rng();
+//    if subdivs == 1 {
+//        jitter_vectors.push((0.0, 0.0));
+//        return jitter_vectors;
+//    } else {
+//        for i in 0..subdivs {
+//            for j in 0..subdivs {
+//                let u = rng.gen();
+//                jitter_vectors.push((u, u));
+//            }
+//        }
+//    }
+//
+//    todo!();
+//    jitter_vectors
+//}
 
 pub const VERTICES: &[Vertex] = &[
     Vertex {
