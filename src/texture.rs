@@ -1,7 +1,7 @@
 use image::GenericImageView;
 use anyhow::*;
 
-use crate::uniform::BindGroup;
+// Taken from learnwgpu
 
 pub struct Texture {
     pub texture: wgpu::Texture,
