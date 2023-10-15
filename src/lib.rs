@@ -6,7 +6,7 @@ mod render_state;
 mod texture;
 mod uniform;
 mod mesh;
-//mod data_structures;
+mod data_structures;
 
 use std::{thread, time::Instant};
 

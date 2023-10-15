@@ -2,11 +2,22 @@ use std::path::Path;
 
 use wgpu::util::DeviceExt;
 
+use crate::data_structures::{vector::Vec3f32, bsp_tree::{AccObj, BspTree}, bbox::Bbox};
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct ModelVertex {
     pub position: [f32; 3],
     _padding: f32,
+}
+
+impl From<Vec3f32> for ModelVertex {
+    fn from(value: Vec3f32) -> Self {
+        Self {
+            position: [value.0, value.1, value.2],
+            _padding: 0.0,
+        }
+    }
 }
 
 impl From<(f32, f32, f32)> for ModelVertex {
@@ -27,7 +38,7 @@ impl std::fmt::Display for ModelVertex {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct ModelIndex {
-    triangle: [u32; 3],
+    pub triangle: [u32; 3],
     _padding: u32,
 }
 
@@ -46,6 +57,8 @@ impl std::fmt::Display for ModelIndex {
     }
 }
 
+///
+/// Mesh type containing vertices and indices in two vecs
 pub struct Mesh {
     vertices: Vec<ModelVertex>,
     indices: Vec<ModelIndex>,
@@ -69,6 +82,25 @@ impl std::fmt::Display for Mesh {
 }
 
 impl Mesh {
+    pub fn bboxes(&self) -> Vec<AccObj> {
+        self.indices.iter().enumerate().map(
+            |(idx, triangle)| {
+                AccObj::new(
+                    idx.try_into().unwrap(),
+                    Bbox::from_triangle(
+                        self.vertices[triangle.triangle[0] as usize].position.into(),
+                        self.vertices[triangle.triangle[1] as usize].position.into(),
+                        self.vertices[triangle.triangle[2] as usize].position.into(),
+                    )
+                )
+            }
+        ).collect()
+    }
+
+    pub fn bsp_tree(&self) -> BspTree {
+        BspTree::new(self.bboxes())
+    }
+
     pub fn scale(&mut self, factor: f32) {
         self.vertices.iter_mut().for_each(|vert| {
             vert.position[0] = vert.position[0] * factor;

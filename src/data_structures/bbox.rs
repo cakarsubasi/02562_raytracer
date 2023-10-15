@@ -5,10 +5,31 @@ use super::vector::*;
 /// ### Bounding Box
 /// Axis aligned bounding box type
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Bbox {
-    min: Vec3f32,
-    max: Vec3f32,
+    pub min: Vec3f32,
+    pub max: Vec3f32,
+}
+
+#[repr(C, align(16))]
+#[derive(Debug, Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+pub struct BboxGpu {
+    pub min: Vec3f32,
+    _padding0: f32,
+    pub max: Vec3f32,
+    _padding1: f32,
+}
+static_assertions::assert_eq_size!(BboxGpu, [u8; 4*4*2]);
+
+impl From<Bbox> for BboxGpu {
+    fn from(value: Bbox) -> Self {
+        Self {
+            min: value.min,
+            _padding0: 0.0,
+            max: value.max,
+            _padding1: 0.0,
+        }
+    }
 }
 
 impl Bbox {

@@ -3,10 +3,9 @@ use winit::{window::{Window, WindowId}, event_loop::EventLoop};
 use crate::{
     texture,
     camera::{Camera, CameraController},
-    uniform::{self, Uniform, Vertex, BindGroup}, command::Command, mesh::{Mesh, MeshGPU}};
+    uniform::{self, Uniform, Vertex, BindGroup}, command::Command, mesh::{Mesh, MeshGPU}, data_structures::bsp_tree::BspTreeGpu};
 
 use anyhow::*;
-
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -33,6 +32,7 @@ pub struct RenderState {
     uniform_bind_group: wgpu::BindGroup,
     texture_bind_group: wgpu::BindGroup,
     mesh_handle: MeshGPU,
+    bsp_tree_handle: BspTreeGpu,
     time_of_last_render: std::time::Instant,
     camera_controller: CameraController,
 }
@@ -132,6 +132,10 @@ impl RenderState {
         model.scale(1f32 / 300f32);
         let mesh_handle = model.into_gpu(&device);
 
+        // create and load the BSP
+        let bsp_tree = model.bsp_tree();
+        let bsp_tree_handle = bsp_tree.into_gpu(&device);
+
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
@@ -139,7 +143,7 @@ impl RenderState {
 
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout, &mesh_handle.layout],
+            bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout, &mesh_handle.layout, &bsp_tree_handle.layout],
             push_constant_ranges: &[],
         }
         );
@@ -188,6 +192,7 @@ impl RenderState {
             uniform_bind_group,
             texture_bind_group,
             mesh_handle,
+            bsp_tree_handle,
             camera_controller,
             time_of_last_render,
         }
@@ -335,6 +340,7 @@ impl RenderState {
         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
         render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
         render_pass.set_bind_group(2, &self.mesh_handle.bind_group, &[]);
+        render_pass.set_bind_group(3, &self.bsp_tree_handle.bind_group, &[]);
         render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         
         drop(render_pass);
