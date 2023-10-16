@@ -332,7 +332,7 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                         } => match key {
                             VirtualKeyCode::Space => {
                                 let shader_module = pollster::block_on(
-                                    render_state.create_shader_module("src/shader.wgsl"),
+                                    render_state.create_shader_module("res/shaders/shader.wgsl"),
                                 );
                                 match shader_module {
                                     Ok(module) => render_state.recreate_render_pipeline(&module),

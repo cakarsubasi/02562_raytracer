@@ -179,26 +179,27 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var result_textured = vec3f(1.0);
     // each loop is one bounce
     if (!intersect_min_max(&r)) {
-        return vec4f(error_shader(), bgcolor.a);
+        return bgcolor;
     }
 
-    for (var i = 0; i < max_depth; i++) {
-        if (intersect_scene(&r, &hit)) {
-            result += shade(&r, &hit);
-            if (hit.use_texture) {
-                result_textured = texture_sample(&hit);
-            }
-        } else {
-            result += bgcolor.rgb; break;
-        }
-
-        if (hit.has_hit) {
-            break;
-        }
-    }
-    result = result * result_textured;
-    //return vec4f(result, bgcolor.a);
-    return vec4f(pow(result, vec3f(1.0/1.0)), bgcolor.a);
+    return vec4f(error_shader(), bgcolor.a);
+    //for (var i = 0; i < max_depth; i++) {
+    //    if (intersect_scene(&r, &hit)) {
+    //        result += shade(&r, &hit);
+    //        if (hit.use_texture) {
+    //            result_textured = texture_sample(&hit);
+    //        }
+    //    } else {
+    //        result += bgcolor.rgb; break;
+    //    }
+//
+    //    if (hit.has_hit) {
+    //        break;
+    //    }
+    //}
+    //result = result * result_textured;
+    ////return vec4f(result, bgcolor.a);
+    //return vec4f(pow(result, vec3f(1.0/1.0)), bgcolor.a);
 }
 
 fn texture_sample(hit: ptr<function, HitRecord>) -> vec3f {
@@ -531,8 +532,10 @@ fn error_shader() -> vec3f {
 
 
 struct Aabb {
-    min: vec4f,
-    max: vec4f,
+    min: vec3f,
+    _padding: f32,
+    max: vec3f,
+    _padding2: f32,
 };
 
 @group(3) @binding(0) var<uniform> aabb: Aabb;
