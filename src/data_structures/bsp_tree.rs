@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use super::{bbox::{Bbox, BboxGpu}, vector::Vec4u32};
 
 const MAX_OBJECTS: u32 = 4;
@@ -14,7 +16,7 @@ pub struct BspTree {
 /// indexed bounding boxes to the BSP Tree
 ///
 /// Each index points towards the primitive (in this case the triangle)
-/// in the index buffer that
+/// in the index buffer that corresponds to the bbox
 #[derive(Debug, Copy, Clone)]
 pub struct AccObj {
     idx: u32,
@@ -27,6 +29,8 @@ impl AccObj {
     }
 }
 
+const NODE_TYPE_LEAF: u32 = 3u32;
+
 impl BspTree {
     pub fn new(objects: Vec<AccObj>) -> Self {
         assert!(
@@ -35,8 +39,8 @@ impl BspTree {
         due to memory limitations"
         );
         let mut bbox = Bbox::new();
-        let max_level = MAX_LEVEL;
-        let count = objects.len() as u32;
+        //let max_level = MAX_LEVEL;
+        //let count = objects.len() as u32;
         // Extend the root node bounding box to include every other box
         objects.iter().for_each(|elem| {
             bbox.include_bbox(&elem.bbox);
@@ -74,6 +78,26 @@ impl BspTree {
         ids
     }
 
+
+
+
+    ///
+    /// Constructs bsp_planes and bsp_array
+    /// 
+    /// ```
+    /// bsp_planes: Vec<f32> = vec![];
+    /// ```
+    /// 
+    /// ```
+    /// bsp_array: Vec<Vec4u32> = vec![];
+    ///  // .0 = (xxxx xx00) : node_type
+    ///  // .0 = (0000 00xx) : node_count
+    ///  // .1 = node_id
+    ///  // .2 = left_node_id
+    ///  // .3 = right_node_id
+    ///  
+    /// ```
+    /// 
     pub fn bsp_array(&self) -> (Vec<f32>, Vec<Vec4u32>) {
         const BSP_TREE_NODES: usize = (1 << (MAX_LEVEL + 1)) - 1;
         //let mut bsp_planes: [f32; BSP_TREE_NODES] = [0.0; BSP_TREE_NODES];
@@ -81,31 +105,31 @@ impl BspTree {
         let mut bsp_planes = vec![0.0; BSP_TREE_NODES];
         let mut bsp_array = vec![Default::default(); BSP_TREE_NODES];
 
-        fn build_bsp_array_recursive(bsp_planes: &mut [f32], bsp_array: &mut [Vec4u32], node: &Node, level: u32, branch: u32, mut id: u32) -> u32 {
+        fn build_bsp_array_recursive(bsp_planes: &mut [f32], bsp_array: &mut [Vec4u32], node: &Node, level: u32, branch: u32, id: &mut u32) {
             if level > MAX_LEVEL {
-                return id;
+                return;
             }
-            let idx = (1<<level) - 1 + branch as usize;
-            bsp_array[idx].2 = (1<<(level + 1)) - 1 + 2*branch;
+            let idx = ((1<<level) + branch - 1)  as usize;
+            bsp_array[idx].1 = 0;
+            bsp_array[idx].2 = (1<<(level + 1)) + 2*branch - 1;
             bsp_array[idx].3 = (1<<(level + 1)) + 2*branch;
             bsp_planes[idx] = node.plane;
             match &node.node_type {
                 NodeType::Leaf { objects } => {
-                    bsp_array[idx].0 = 0 + (node.count<<2) as u32;
-                    bsp_array[idx].1 = id;
-                    objects.len() as u32
+                    bsp_array[idx].0 = NODE_TYPE_LEAF + (node.count<<2) as u32;
+                    bsp_array[idx].1 = *id;
+                    *id = objects.len() as u32 + *id;
+                    println!("id: {id}");
                 },
                 NodeType::Split { left, right, split } => {
                     bsp_array[idx].0 = *split as u32 + (node.count<<2) as u32;
-                    bsp_array[idx].1 = 0;
-                    id += build_bsp_array_recursive(bsp_planes, bsp_array, &left, level + 1, branch * 2, id);
-                    id += build_bsp_array_recursive(bsp_planes, bsp_array, &right, level + 1, branch * 2 + 1, id);
-                    id
+                    build_bsp_array_recursive(bsp_planes, bsp_array, &left, level + 1, branch * 2, id);
+                    build_bsp_array_recursive(bsp_planes, bsp_array, &right, level + 1, branch * 2 + 1, id);
                 },
             }
         }
 
-        build_bsp_array_recursive(&mut bsp_planes.as_mut_slice(), &mut bsp_array.as_mut_slice(), &self.root, 0, 0, 0);
+        build_bsp_array_recursive(&mut bsp_planes.as_mut_slice(), &mut bsp_array.as_mut_slice(), &self.root, 0, 0, &mut 0);
 
         (Vec::from(bsp_planes), Vec::from(bsp_array))
     }
@@ -276,7 +300,8 @@ impl Node {
     }
 }
 
-struct BspTreeIntermediate {
+#[derive(Debug)]
+pub struct BspTreeIntermediate {
     bbox: BboxGpu,
     ids: Vec<u32>,
     bsp_tree: Vec<Vec4u32>,
@@ -297,6 +322,7 @@ impl BspTreeIntermediate {
 
     fn into_gpu(self, device: &wgpu::Device) -> BspTreeGpu {
         use wgpu::util::DeviceExt;
+        println!("{:?}", self.bbox);
         let bbox_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Bounding Box Uniform"),
             contents: bytemuck::cast_slice(&[self.bbox]),
@@ -414,6 +440,12 @@ pub struct BspTreeGpu {
     pub bind_group: wgpu::BindGroup,
 }
 
+impl BspTreeGpu {
+    pub fn intermediate(&self) -> &BspTreeIntermediate {
+        &self._intermediates
+    }
+}
+
 #[cfg(test)]
 mod bsp_tree_test {
     use crate::mesh::Mesh;
@@ -422,9 +454,40 @@ mod bsp_tree_test {
 
     #[test]
     fn bsp_tree_new() {
-        let model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
+        let mut model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
+        model.scale(1.0 / 500.0);
         let bboxes = model.bboxes();
         let bsp_tree = BspTree::new(bboxes);
-        println!("{bsp_tree:?}");
+        println!("{bsp_tree:#?}");
+        println!("{:?}", bsp_tree.root.bbox);
+    }
+
+    #[test]
+    fn bsp_tree_ids() {
+        use std::collections::HashSet;
+        let mut model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
+        model.scale(1.0 / 500.0);
+        let bboxes = model.bboxes();
+        let bsp_tree = BspTree::new(bboxes);
+        let (_, bsp_array) = bsp_tree.bsp_array();
+        let mut test_map: HashSet<u32> = HashSet::new();
+        let mut id: usize = 0;
+        loop {
+            if id == bsp_array.len() {
+                break;
+            }
+            let bsp_elem = bsp_array[id];
+            id += 1;
+            if bsp_elem.0 == u32::MAX {
+                continue;
+            }
+            let node_type = bsp_elem.0 & 3u32;
+            if node_type == NODE_TYPE_LEAF {
+                if !test_map.insert(bsp_elem.1) {
+                    assert!(false, "num: {id}\n {:?}", bsp_array.split_at(id+1).0)
+                }
+            }
+        }
+
     }
 }
