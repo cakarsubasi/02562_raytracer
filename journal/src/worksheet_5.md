@@ -4,11 +4,11 @@
 
 # 1. Storage buffers
 
-Not done, no images
+Done, no images
 
 # 2. Utah Teapot
 
-Not done
+Done, first gotta do BSPs
 
 ## 2.b. Directional light
 
