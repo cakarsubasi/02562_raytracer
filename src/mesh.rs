@@ -2,19 +2,19 @@ use std::path::Path;
 
 use wgpu::util::DeviceExt;
 
-use crate::data_structures::{vector::Vec3f32, bsp_tree::{AccObj, BspTree}, bbox::Bbox};
+use crate::data_structures::{vector::{Vec3f32, Vec3u32}, bsp_tree::{AccObj, BspTree}, bbox::Bbox};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct ModelVertex {
-    pub position: [f32; 3],
+    pub position: Vec3f32,
     _padding: f32,
 }
 
 impl From<Vec3f32> for ModelVertex {
     fn from(value: Vec3f32) -> Self {
         Self {
-            position: [value.0, value.1, value.2],
+            position: [value.0, value.1, value.2].into(),
             _padding: 0.0,
         }
     }
@@ -23,7 +23,7 @@ impl From<Vec3f32> for ModelVertex {
 impl From<(f32, f32, f32)> for ModelVertex {
     fn from(value: (f32, f32, f32)) -> Self {
         Self {
-            position: [value.0, value.1, value.2],
+            position: [value.0, value.1, value.2].into(),
             _padding: 0.0,
         }
     }
@@ -38,14 +38,14 @@ impl std::fmt::Display for ModelVertex {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct ModelIndex {
-    pub triangle: [u32; 3],
+    pub triangle: Vec3u32,
     _padding: u32,
 }
 
 impl From<(u32, u32, u32)> for ModelIndex {
     fn from(value: (u32, u32, u32)) -> Self {
         Self {
-            triangle: [value.0, value.1, value.2],
+            triangle: [value.0, value.1, value.2].into(),
             _padding: 0u32,
         }
     }
@@ -154,7 +154,7 @@ impl Mesh {
                         total + m.mesh.indices[i * 3],
                         total + m.mesh.indices[i * 3 + 1],
                         total + m.mesh.indices[i * 3 + 2],
-                    ],
+                    ].into(),
                     _padding: 0,
                 })
                 .collect::<Vec<_>>();
