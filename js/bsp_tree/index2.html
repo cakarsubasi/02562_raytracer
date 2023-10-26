@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+ <title>W1P1</title>
+ <script type="text/javascript" src="w1p1.js"></script>
+</head>
+<body>
+ <canvas id="webgpu-canvas" width="512" height="512">
+ Please use a browser that supports HTML5 canvas.
+ </canvas>
+</body>
+
+<script id="wgsl" type="x-shader">
+
+    struct VSOut {
+        @builtin(position) position: vec4f,
+        @location(0) coords : vec2f,
+        };
+    
+    struct Ray {
+        direction: vec3f,
+        origin: vec3f,
+    };
+        
+        @vertex
+        fn main_vs(@builtin(vertex_index) VertexIndex : u32) -> VSOut
+        {
+        const pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(1.0, -1.0));
+        var vsOut: VSOut;
+        vsOut.position = vec4f(pos[VertexIndex], 0.0, 1.0);
+        vsOut.coords = pos[VertexIndex];
+        return vsOut;
+        }
+        // Define Ray struct
+        fn get_camera_ray(uv: vec2f) -> Ray
+        {
+        // Implement ray generation (WGSL has vector operations like normalize and cross)
+            return Ray(
+                vec3f(uv.x, 0.5+uv.y, 1.0),
+                vec3f(1.0, 1.0, 1.0),
+                );
+        }
+        
+        @fragment
+        fn main_fs(@location(0) coords: vec2f) -> @location(0) vec4f
+        {
+        let uv = coords*0.5;
+        var r = get_camera_ray(uv);
+        return vec4f(r.direction*0.5 + 0.5, 1.0);
+        }
+</script>
+
+</html>

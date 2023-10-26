@@ -17,7 +17,7 @@
 
 // OBJDoc object
 // Constructor
-var OBJDoc = function (fileName) {
+export var OBJDoc = function (fileName) {
   this.fileName = fileName;
   this.mtls = new Array(0);      // Initialize the property for MTL
   this.objects = new Array(0);   // Initialize the property for Object
