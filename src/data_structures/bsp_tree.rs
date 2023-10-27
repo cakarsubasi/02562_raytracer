@@ -5,14 +5,15 @@ use super::{
     vector::Vec4u32,
 };
 
-const MAX_OBJECTS: u32 = 4;
-const MAX_LEVEL: u32 = 20;
+const NODE_TYPE_LEAF: u32 = 3u32;
+
 const F_EPS: f32 = 1e-6;
 const D_EPS: f32 = 1e-12;
 
 #[derive(Debug)]
 pub struct BspTree {
     root: Node,
+    max_depth: u32,
     bbox: Bbox,
 }
 
@@ -33,26 +34,71 @@ impl AccObj {
     }
 }
 
-const NODE_TYPE_LEAF: u32 = 3u32;
+
+#[derive(Debug, Copy, Clone)]
+enum Split {
+    AxisX = 0,
+    AxisY = 1,
+    AxisZ = 2,
+}
+
+impl From<u32> for Split {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => Split::AxisX,
+            1 => Split::AxisY,
+            2 => Split::AxisZ,
+            _ => panic!("unexpected input {value}"),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Node {
+    count: usize,
+    node_type: NodeType,
+}
+
+#[derive(Debug)]
+enum NodeType {
+    Leaf {
+        objects: Vec<AccObj>,
+    },
+    Split {
+        split: Split,
+        plane: f32,
+        left: Box<Node>,
+        right: Box<Node>,
+    },
+}
+
+
 
 impl BspTree {
-    pub fn new(objects: Vec<AccObj>) -> Self {
+    pub fn new(objects: Vec<AccObj>, max_depth: u32, max_objects_on_leaf: u32) -> Self {
         assert!(
             objects.len() < u32::MAX as usize,
             "We cannot deal with trees that contain more than 4 billion objects
         due to memory limitations"
         );
+        assert!(
+            max_depth > 0 && max_depth < 50,
+            "BspTree depth should be positive and smaller than 32, got: {max_depth}"
+        );
+        assert!(
+            max_objects_on_leaf > 0,
+            "Leaf objects must be positive, got: {max_objects_on_leaf}"
+        );
         let mut bbox = Bbox::new();
-        //let max_level = MAX_LEVEL;
-        //let count = objects.len() as u32;
         // Extend the root node bounding box to include every other box
         objects.iter().for_each(|elem| {
             bbox.include_bbox(&elem.bbox);
         });
-        let obj_refer = objects.iter().map(|obj| obj).collect();
-        let root = Node::subdivide_node(bbox, 0, &obj_refer);
 
-        Self { root, bbox }
+        let obj_refer = objects.iter().map(|obj| obj).collect();
+        let root = Node::subdivide_node(bbox, 0, max_depth, max_objects_on_leaf, &obj_refer);
+
+        Self { root, bbox, max_depth }
     }
 
     pub fn count(&self) -> usize {
@@ -101,27 +147,28 @@ impl BspTree {
     /// ```
     ///
     pub fn bsp_array(&self) -> (Vec<f32>, Vec<Vec4u32>) {
-        const BSP_TREE_NODES: usize = (1 << (MAX_LEVEL + 1)) - 1;
+        let bsp_tree_nodes: usize = (1 << (self.max_depth + 1)) - 1;
         //let mut bsp_planes: [f32; BSP_TREE_NODES] = [0.0; BSP_TREE_NODES];
         //let mut bsp_array: [Vec4u32; BSP_TREE_NODES] = [Default::default(); BSP_TREE_NODES];
-        let mut bsp_planes = vec![0.0; BSP_TREE_NODES];
-        let mut bsp_array = vec![Default::default(); BSP_TREE_NODES];
+        let mut bsp_planes = vec![0.0; bsp_tree_nodes];
+        let mut bsp_array = vec![Default::default(); bsp_tree_nodes];
 
         fn build_bsp_array_recursive(
             bsp_planes: &mut [f32],
             bsp_array: &mut [Vec4u32],
             node: &Node,
-            level: u32,
+            depth: u32,
+            max_depth: u32,
             branch: u32,
             node_id: &mut u32,
         ) {
-            if level > MAX_LEVEL {
+            if depth > max_depth {
                 return;
             }
-            let idx = ((1 << level) + branch - 1) as usize;
+            let idx = ((1 << depth) + branch - 1) as usize;
             bsp_array[idx].1 = 0;
-            bsp_array[idx].2 = (1 << (level + 1)) + 2 * branch - 1;
-            bsp_array[idx].3 = (1 << (level + 1)) + 2 * branch;
+            bsp_array[idx].2 = (1 << (depth + 1)) + 2 * branch - 1;
+            bsp_array[idx].3 = (1 << (depth + 1)) + 2 * branch;
             bsp_planes[idx] = 0.0;
             match &node.node_type {
                 NodeType::Leaf { objects } => {
@@ -141,7 +188,8 @@ impl BspTree {
                         bsp_planes,
                         bsp_array,
                         &left,
-                        level + 1,
+                        depth + 1,
+                        max_depth,
                         branch * 2,
                         node_id,
                     );
@@ -149,7 +197,8 @@ impl BspTree {
                         bsp_planes,
                         bsp_array,
                         &right,
-                        level + 1,
+                        depth + 1,
+                        max_depth,
                         branch * 2 + 1,
                         node_id,
                     );
@@ -162,6 +211,7 @@ impl BspTree {
             &mut bsp_array.as_mut_slice(),
             &self.root,
             0,
+            self.max_depth,
             0,
             &mut 0,
         );
@@ -174,54 +224,19 @@ impl BspTree {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-enum Split {
-    AxisX = 0,
-    AxisY = 1,
-    AxisZ = 2,
-}
-
-impl From<u32> for Split {
-    fn from(value: u32) -> Self {
-        match value {
-            0 => Split::AxisX,
-            1 => Split::AxisY,
-            2 => Split::AxisZ,
-            _ => panic!("unexpected input {value}"),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct Node {
-    count: usize,
-    node_type: NodeType,
-}
-
-#[derive(Debug)]
-enum NodeType {
-    Leaf {
-        objects: Vec<AccObj>,
-    },
-    Split {
-        split: Split,
-        plane: f32,
-        left: Box<Node>,
-        right: Box<Node>,
-    },
-}
-
 impl Node {
     ///
     /// Create a complete Node hierarchy using subdivision
     fn subdivide_node(
         bbox: Bbox,
-        level: u32,
+        depth: u32,
+        max_depth: u32,
+        max_objects_on_leaf: u32,
         objects: &Vec<&AccObj>,
     ) -> Node {
         let tests = 4;
 
-        if objects.len() as u32 <= MAX_OBJECTS || level == MAX_LEVEL {
+        if objects.len() as u32 <= max_objects_on_leaf || depth == max_depth {
             let node = Node {
                 count: objects.len(),
                 node_type: NodeType::Leaf {
@@ -327,12 +342,16 @@ impl Node {
                 node_type: NodeType::Split {
                     left: Box::new(Self::subdivide_node(
                         left_bbox,
-                        level + 1,
+                        depth + 1,
+                        max_depth,
+                        max_objects_on_leaf,
                         &left_objects,
                     )),
                     right: Box::new(Self::subdivide_node(
                         right_bbox,
-                        level + 1,
+                        depth + 1,
+                        max_depth,
+                        max_objects_on_leaf,
                         &right_objects,
                     )),
                     split: axis_leaf.into(),
@@ -499,7 +518,7 @@ mod bsp_tree_test {
     fn bsp_tree_new() {
         let model = Mesh::from_obj("res/models/test_object.obj").expect("Failed to load model");
         let bboxes = model.bboxes();
-        let bsp_tree = BspTree::new(bboxes);
+        let bsp_tree = BspTree::new(bboxes, 20, 4);
 
         let mut set = HashSet::new();
         fn recurse(node: &Node, set: &mut HashSet<u32>) {
@@ -539,7 +558,7 @@ mod bsp_tree_test {
         let mut model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
         model.scale(1.0 / 500.0);
         let bboxes = model.bboxes();
-        let bsp_tree = BspTree::new(bboxes);
+        let bsp_tree = BspTree::new(bboxes, 20, 4);
         let (_, bsp_array) = bsp_tree.bsp_array();
         let mut test_map: HashSet<u32> = HashSet::new();
         let mut id: usize = 0;

@@ -98,7 +98,11 @@ impl Mesh {
     }
 
     pub fn bsp_tree(&self) -> BspTree {
-        BspTree::new(self.bboxes())
+        BspTree::new(self.bboxes(), 20, 4)
+    }
+
+    pub fn index_count(&self) -> u32 {
+        self.indices.len() as u32
     }
 
     pub fn scale(&mut self, factor: f32) {
