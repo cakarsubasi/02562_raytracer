@@ -8,7 +8,6 @@ use super::{
 const NODE_TYPE_LEAF: u32 = 3u32;
 
 const F_EPS: f32 = 1e-6;
-const D_EPS: f32 = 1e-12;
 
 #[derive(Debug)]
 pub struct BspTree {
@@ -148,8 +147,6 @@ impl BspTree {
     ///
     pub fn bsp_array(&self) -> (Vec<f32>, Vec<Vec4u32>) {
         let bsp_tree_nodes: usize = (1 << (self.max_depth + 1)) - 1;
-        //let mut bsp_planes: [f32; BSP_TREE_NODES] = [0.0; BSP_TREE_NODES];
-        //let mut bsp_array: [Vec4u32; BSP_TREE_NODES] = [Default::default(); BSP_TREE_NODES];
         let mut bsp_planes = vec![0.0; bsp_tree_nodes];
         let mut bsp_array = vec![Default::default(); bsp_tree_nodes];
 
@@ -216,7 +213,7 @@ impl BspTree {
             &mut 0,
         );
 
-        (Vec::from(bsp_planes), Vec::from(bsp_array))
+        (bsp_planes, bsp_array)
     }
 
     pub fn into_gpu(&self, device: &wgpu::Device) -> BspTreeGpu {
