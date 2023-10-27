@@ -3,7 +3,7 @@
 
 # 1. Axis aligned BSP Tree
 
-Partially done
+Done. Need screenshots.
 
 # 2. Merge material index to face coordinates
 
