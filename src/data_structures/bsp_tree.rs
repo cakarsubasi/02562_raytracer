@@ -381,7 +381,6 @@ impl BspTreeIntermediate {
 
     fn into_gpu(self, device: &wgpu::Device) -> BspTreeGpu {
         use wgpu::util::DeviceExt;
-        println!("{:?}", self.bbox);
         let bbox_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Bounding Box Uniform"),
             contents: bytemuck::cast_slice(&[self.bbox]),

@@ -32,8 +32,10 @@ impl From<Bbox> for BboxGpu {
     }
 }
 
+/// Since this implementation mostly mirrors the optix one, we leave
+/// the methods in even though we don't strictly need them
+#[allow(dead_code)]
 impl Bbox {
-
     ///
     /// Create a new bounding box including nothing
     pub fn new() -> Bbox {
@@ -55,20 +57,22 @@ impl Bbox {
     /// Extend the bounding box to include the given vertex
     pub fn include_vertex(&mut self, v: Vec3f32) {
         self.min.0 = f32::min(self.min.0, v.0);
-        self.max.0 = f32::max(self.max.0, v.0);
         self.min.1 = f32::min(self.min.1, v.1);
-        self.max.1 = f32::max(self.max.1, v.1);
         self.min.2 = f32::min(self.min.2, v.2);
+        
+        self.max.0 = f32::max(self.max.0, v.0);
+        self.max.1 = f32::max(self.max.1, v.1);
         self.max.2 = f32::max(self.max.2, v.2);
     }
 
     /// Extend the bounding box to include the given bounding box
     pub fn include_bbox(&mut self, other: &Bbox) {
         self.min.0 = f32::min(self.min.0, other.min.0);
-        self.max.0 = f32::max(self.max.0, other.max.0);
         self.min.1 = f32::min(self.min.1, other.min.1);
-        self.max.1 = f32::max(self.max.1, other.max.1);
         self.min.2 = f32::min(self.min.2, other.min.2);
+
+        self.max.0 = f32::max(self.max.0, other.max.0);
+        self.max.1 = f32::max(self.max.1, other.max.1);
         self.max.2 = f32::max(self.max.2, other.max.2);
     }
 
