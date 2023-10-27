@@ -13,6 +13,7 @@ const D_EPS: f32 = 1e-12;
 #[derive(Debug)]
 pub struct BspTree {
     root: Node,
+    bbox: Bbox,
 }
 
 /// Intermediate data structure to pass
@@ -51,7 +52,7 @@ impl BspTree {
         let obj_refer = objects.iter().map(|obj| obj).collect();
         let root = Node::subdivide_node(bbox, 0, &obj_refer, &mut Vec::new());
 
-        Self { root }
+        Self { root, bbox }
     }
 
     pub fn count(&self) -> usize {
@@ -71,6 +72,7 @@ impl BspTree {
                     right,
                     split: _,
                     plane: _,
+                    bbox: _,
                 } => {
                     primitive_ids_recursive(&left, array);
                     primitive_ids_recursive(&right, array);
@@ -123,17 +125,16 @@ impl BspTree {
             bsp_array[idx].3 = (1 << (level + 1)) + 2 * branch;
             bsp_planes[idx] = 0.0;
             match &node.node_type {
-                NodeType::Leaf { objects, id } => {
+                NodeType::Leaf { objects: _, id } => {
                     bsp_array[idx].0 = NODE_TYPE_LEAF + (node.count << 2) as u32;
                     bsp_array[idx].1 = *id;
-                    //*id = objects.len() as u32 + *id;
-                    //println!("id: {id}");
                 }
                 NodeType::Split {
                     left,
                     right,
                     split,
                     plane,
+                    bbox: _,
                 } => {
                     bsp_array[idx].0 = *split as u32 + (node.count << 2) as u32;
                     bsp_planes[idx] = *plane;
@@ -195,7 +196,6 @@ impl From<u32> for Split {
 #[derive(Debug)]
 struct Node {
     count: usize,
-    bbox: Bbox,
     node_type: NodeType,
 }
 
@@ -207,6 +207,7 @@ enum NodeType {
     },
     Split {
         split: Split,
+        bbox: Bbox,
         plane: f32,
         left: Box<Node>,
         right: Box<Node>,
@@ -227,7 +228,6 @@ impl Node {
         if objects.len() as u32 <= MAX_OBJECTS || level == MAX_LEVEL {
             let node = Node {
                 count: objects.len(),
-                bbox,
                 node_type: NodeType::Leaf {
                     objects: objects.iter().map(|elem| (*elem).clone()).collect(),
                     id: tree_objects.len() as u32,
@@ -327,10 +327,8 @@ impl Node {
                     right_objects.push(*obj);
                 }
             }
-            log::debug!("Hello");
             Node {
                 count: objects.len(),
-                bbox: bbox,
                 node_type: NodeType::Split {
                     left: Box::new(Self::subdivide_node(
                         left_bbox,
@@ -344,6 +342,7 @@ impl Node {
                         &right_objects,
                         tree_objects,
                     )),
+                    bbox: bbox,
                     split: axis_leaf.into(),
                     plane: plane,
                 },
@@ -365,7 +364,7 @@ impl BspTreeIntermediate {
         let ids = bsp_tree.primitive_ids();
         let (bsp_planes, bsp_tree_vec) = bsp_tree.bsp_array();
         Self {
-            bbox: bsp_tree.root.bbox.into(),
+            bbox: bsp_tree.bbox.into(),
             ids,
             bsp_tree: bsp_tree_vec,
             bsp_planes,
@@ -510,8 +509,6 @@ mod bsp_tree_test {
         //model.scale(1.0 / 500.0);
         let bboxes = model.bboxes();
         let bsp_tree = BspTree::new(bboxes);
-        println!("{bsp_tree:#?}");
-        println!("{:?}", bsp_tree.root.bbox);
 
         let mut set = HashSet::new();
         fn recurse(node: &Node, set: &mut HashSet<u32>) {
@@ -524,8 +521,9 @@ mod bsp_tree_test {
                 NodeType::Split {
                     left,
                     right,
-                    split,
-                    plane,
+                    split: _,
+                    plane: _,
+                    bbox: _,
                 } => {
                     recurse(&left, set);
                     recurse(&right, set);
