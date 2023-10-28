@@ -2,6 +2,7 @@ pub mod uniform;
 pub mod vertex;
 pub mod texture;
 pub mod mesh;
+pub mod storage_mesh;
 pub mod bsp_tree;
 
 pub trait Bindable {
@@ -10,7 +11,7 @@ pub trait Bindable {
     fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor>;
 }
 
-pub fn create_bind_group_layouts(device: &wgpu::Device, layout_entries: Vec<Vec<wgpu::BindGroupLayoutEntry>>) -> Vec<wgpu::BindGroupLayout> {
+pub fn create_bind_group_layouts(device: &wgpu::Device, layout_entries: &Vec<Vec<wgpu::BindGroupLayoutEntry>>) -> Vec<wgpu::BindGroupLayout> {
     let mut layouts = Vec::with_capacity(layout_entries.len());
     for entries in layout_entries {
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -22,7 +23,7 @@ pub fn create_bind_group_layouts(device: &wgpu::Device, layout_entries: Vec<Vec<
     layouts
 }
 
-pub fn create_bind_groups<'a, 'b>(device: &wgpu::Device, bind_group_entries: Vec<Vec<wgpu::BindGroupEntry>>, bind_group_layouts: Vec<wgpu::BindGroupLayout>) -> Vec<wgpu::BindGroup> {
+pub fn create_bind_groups<'a, 'b>(device: &wgpu::Device, bind_group_entries: &Vec<Vec<wgpu::BindGroupEntry>>, bind_group_layouts: &Vec<wgpu::BindGroupLayout>) -> Vec<wgpu::BindGroup> {
     let mut bind_groups = Vec::new();
 
     for (entries, layout) in bind_group_entries.iter().zip(bind_group_layouts) {

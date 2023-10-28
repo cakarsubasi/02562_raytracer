@@ -1,7 +1,9 @@
+use crate::data_structures::vector::{Vec3f32, vec3f32};
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
-    position: [f32; 3],
+    position: Vec3f32,
 }
 
 impl Vertex {
@@ -20,16 +22,16 @@ impl Vertex {
 
 pub const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [-1.0, -1.0, 0.0],
+        position: vec3f32(-1.0, -1.0, 0.0),
     }, // A
     Vertex {
-        position: [-1.0, 1.0, 0.0],
+        position: vec3f32(-1.0, 1.0, 0.0),
     }, // B
     Vertex {
-        position: [1.0, 1.0, 0.0],
+        position: vec3f32(1.0, 1.0, 0.0),
     }, // C
     Vertex {
-        position: [1.0, -1.0, 0.0],
+        position: vec3f32(1.0, -1.0, 0.0),
     }, // D
 ];
 

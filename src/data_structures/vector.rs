@@ -17,11 +17,11 @@ pub type Vec4f32 = Vec4<f32>;
 pub type Vec4u32 = Vec4<u32>;
 
 #[inline(always)]
-pub fn vec3f32(f0: f32, f1: f32, f2: f32) -> Vec3<f32> {
+pub const fn vec3f32(f0: f32, f1: f32, f2: f32) -> Vec3<f32> {
     Vec3::<f32>(f0, f1, f2)
 }
 #[inline(always)]
-pub fn vec3f(f0: f32, f1: f32, f2: f32) -> Vec3<f32> {
+pub const fn vec3f(f0: f32, f1: f32, f2: f32) -> Vec3<f32> {
     vec3f32(f0, f1, f2)
 }
 

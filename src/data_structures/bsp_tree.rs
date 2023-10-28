@@ -379,7 +379,7 @@ impl BspTreeIntermediate {
 
 #[cfg(test)]
 mod bsp_tree_test {
-    use crate::bindings::mesh::Mesh;
+    use crate::bindings::storage_mesh::Mesh;
 
     use super::*;
     use std::collections::HashSet;
