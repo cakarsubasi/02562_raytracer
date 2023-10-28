@@ -1,5 +1,5 @@
 use super::{Bindable, BufferOwner, WgslBindDescriptor};
-use crate::{camera::Camera, bindings::WgslSource};
+use crate::camera::Camera;
 
 use wgpu::util::DeviceExt;
 

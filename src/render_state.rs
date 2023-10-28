@@ -23,8 +23,6 @@ use anyhow::*;
 use std::fs::File;
 use std::io::prelude::*;
 
-use wgpu::util::DeviceExt;
-
 const CAMERA_SPEED: f32 = 0.05;
 
 pub struct RenderState {

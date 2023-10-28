@@ -1,8 +1,6 @@
 use anyhow::*;
 use image::GenericImageView;
 
-use crate::bindings::WgslSource;
-
 use super::{Bindable, WgslBindDescriptor};
 
 // Taken from learnwgpu

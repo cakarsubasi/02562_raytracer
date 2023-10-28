@@ -2,7 +2,7 @@ use std::path::Path;
 
 use wgpu::util::DeviceExt;
 
-use crate::{data_structures::{vector::{Vec3f32, Vec3u32, vec3f32}, bsp_tree::{AccObj, BspTree}, bbox::Bbox}, bindings::{WgslBindDescriptor, WgslSource}};
+use crate::{data_structures::{vector::{Vec3f32, Vec3u32, vec3f32}, bsp_tree::{AccObj, BspTree}, bbox::Bbox}, bindings::WgslBindDescriptor};
 
 use super::Bindable;
 

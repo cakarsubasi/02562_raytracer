@@ -89,9 +89,9 @@ impl Bindable for BspTreeGpu {
     _padding2: f32,
 };";
 
-        let aabb_code = include_str!("../../res/shaders/aabb.wgsl");
+        let aabb_code = "res/shaders/aabb.wgsl";
 
-        let bsp_tree_code = include_str!("../../res/shaders/bsp.wgsl");
+        let bsp_tree_code = "res/shaders/bsp.wgsl";
         
         vec![
             WgslBindDescriptor {
@@ -99,7 +99,7 @@ impl Bindable for BspTreeGpu {
                 bind_type: Some("uniform"),
                 var_name: "aabb",
                 var_type: "Aabb",
-                extra_code: Some(WgslSource::Str(aabb_code)),
+                extra_code: Some(WgslSource::File(aabb_code)),
             },
             WgslBindDescriptor {
                 struct_def: None,
@@ -120,7 +120,7 @@ impl Bindable for BspTreeGpu {
                 bind_type: Some("storage"),
                 var_name: "bspPlanes",
                 var_type: "array<f32>",
-                extra_code: Some(WgslSource::Str(bsp_tree_code)),
+                extra_code: Some(WgslSource::File(bsp_tree_code)),
             }
         ]
     }
