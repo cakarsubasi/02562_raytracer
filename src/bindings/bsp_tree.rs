@@ -1,8 +1,8 @@
 use wgpu::util::DeviceExt;
 
-use crate::data_structures::bsp_tree::BspTreeIntermediate;
+use crate::data_structures::bsp_tree::{BspTreeIntermediate, BspTree};
 
-use super::Bindable;
+use super::{Bindable, IntoGpu};
 
 pub struct BspTreeGpu {
     // need to hold intermediates so they don't get dropped
@@ -59,7 +59,7 @@ impl Bindable for BspTreeGpu {
         ]
     }
 
-    fn get_bind_group_entries(&self, device: &wgpu::Device) -> Vec<wgpu::BindGroupEntry> {
+    fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
         vec![
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -121,5 +121,13 @@ impl BspTreeGpu {
             bsp_tree_buffer,
             bsp_planes_buffer,
         }
+    }
+}
+
+impl IntoGpu for BspTree {
+    type Output = BspTreeGpu;
+
+    fn into_gpu(&self, device: &wgpu::Device) -> Self::Output {
+        Self::Output::new(&device, BspTreeIntermediate::new(&self))
     }
 }

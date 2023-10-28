@@ -96,6 +96,7 @@ impl Mesh {
         BspTree::new(self.bboxes(), 20, 4)
     }
 
+    #[allow(dead_code)]
     pub fn index_count(&self) -> u32 {
         self.indices.len() as u32
     }
@@ -165,7 +166,7 @@ impl Bindable for MeshGpu {
         ]
     }
 
-    fn get_bind_group_entries(&self, device: &wgpu::Device) -> Vec<wgpu::BindGroupEntry> {
+    fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
         vec![
                 wgpu::BindGroupEntry {
                     binding: 0,

@@ -82,7 +82,7 @@ impl Bindable for UniformGpu {
         }]
     }
 
-    fn get_bind_group_entries(&self, device: &wgpu::Device) -> Vec<wgpu::BindGroupEntry> {
+    fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
         vec![wgpu::BindGroupEntry {
             binding: 0,
             resource: self.buffer.as_entire_binding(),
@@ -91,25 +91,6 @@ impl Bindable for UniformGpu {
 
     fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
         todo!()
-    }
-}
-
-impl UniformGpu {
-    fn create_bind_group(
-        self,
-        device: &wgpu::Device,
-    ) -> (wgpu::Buffer, wgpu::BindGroupLayout, wgpu::BindGroup) {
-
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: self.get_layout_entries().as_ref(),
-            label: Some("uniform_bind_group_layout"),
-        });
-        let bindgroup = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &layout,
-            entries: self.get_bind_group_entries(device).as_ref(),
-            label: Some("uniform_bind_group"),
-        });
-        (self.buffer, layout, bindgroup)
     }
 }
 

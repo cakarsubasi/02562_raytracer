@@ -2,7 +2,7 @@ use wgpu;
 use winit::{window::{Window, WindowId}, event_loop::EventLoop};
 use crate::{
     camera::{Camera, CameraController},
-    bindings::{Bindable, uniform::{self, Uniform, UniformGpu}, vertex::{self, Vertex}, mesh::{Mesh, MeshGpu}, texture::{Texture}, create_bind_group_layouts, create_bind_groups, bsp_tree::BspTreeGpu}, command::Command};
+    bindings::{Bindable, uniform::UniformGpu, vertex::{self, Vertex}, mesh::{Mesh, MeshGpu}, texture::Texture, create_bind_group_layouts, create_bind_groups, bsp_tree::BspTreeGpu, IntoGpu}, command::Command};
 
 use anyhow::*;
 
@@ -146,7 +146,7 @@ impl RenderState {
         );
         
         let bind_group_entries = 
-        vec![uniform.get_bind_group_entries(&device), texture.get_bind_group_entries(&device), mesh_handle.get_bind_group_entries(&device), bsp_tree_handle.get_bind_group_entries(&device)];
+        vec![uniform.get_bind_group_entries(), texture.get_bind_group_entries(), mesh_handle.get_bind_group_entries(), bsp_tree_handle.get_bind_group_entries()];
         let bind_groups = create_bind_groups(&device, bind_group_entries, bind_group_layouts);
 
         let render_pipeline = RenderState::create_render_pipeline(

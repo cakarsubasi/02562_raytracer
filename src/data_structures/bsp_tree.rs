@@ -1,7 +1,5 @@
 use std::fmt::Debug;
 
-use crate::bindings::bsp_tree::BspTreeGpu;
-
 use super::{
     bbox::{Bbox, BboxGpu},
     vector::Vec4u32,
@@ -218,10 +216,6 @@ impl BspTree {
 
         (bsp_planes, bsp_array)
     }
-
-    pub fn into_gpu(&self, device: &wgpu::Device) -> BspTreeGpu {
-        BspTreeIntermediate::new(self).into_gpu(&device)
-    }
 }
 
 impl Node {
@@ -371,7 +365,7 @@ pub struct BspTreeIntermediate {
 }
 
 impl BspTreeIntermediate {
-    fn new(bsp_tree: &BspTree) -> Self {
+    pub fn new(bsp_tree: &BspTree) -> Self {
         let ids = bsp_tree.primitive_ids();
         let (bsp_planes, bsp_tree_vec) = bsp_tree.bsp_array();
         Self {
@@ -381,17 +375,7 @@ impl BspTreeIntermediate {
             bsp_planes,
         }
     }
-
-    fn into_gpu(self, device: &wgpu::Device) -> BspTreeGpu {
-        BspTreeGpu::new(device, self)
-    }
 }
-
-//impl BspTreeGpu {
-//    pub fn intermediate(&self) -> &BspTreeIntermediate {
-//        &self._intermediates
-//    }
-//}
 
 #[cfg(test)]
 mod bsp_tree_test {
