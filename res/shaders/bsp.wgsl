@@ -1,45 +1,13 @@
-struct Aabb {
-    min: vec4f,
-    max: vec4f,
-};
+//@group(3) @binding(1) var<storage> treeIds: array<u32>;
+//@group(3) @binding(2) var<storage> bspTree: array<vec4u>;
+//@group(3) @binding(3) var<storage> bspPlanes: array<f32>;
 
-@group(0) @binding(0) var<uniform> aabb: Aabb;
+const MAX_LEVEL = 20u;
+const BSP_LEAF = 3u;
+var<private> branch_node: array<vec2u, MAX_LEVEL>;
+var<private> branch_ray: array<vec2f, MAX_LEVEL>;
 
-fn intersect_min_max(r: ptr<function, Ray>) -> bool
-{
-    var tmin = 1.0e32f;
-    var tmax = -1.0e32f;
-
-    for(var i = 0u; i < 3u; i++) {
-        if(abs((*r).direction[i]) > 1.0e-8f) {
-            let p1 = (aabb.min[i] - (*r).origin[i])/(*r).direction[i];
-            let p2 = (aabb.max[i] - (*r).origin[i])/(*r).direction[i];
-            let pmin = min(p1, p2);
-            let pmax = max(p1, p2);
-            tmin = min(tmin, pmin);
-            tmax = max(tmax, pmax);
-        }
-    }
-
-    if (tmin > tmax || tmin > (*r).tmax || tmax < (*r).tmin) {
-        return false;
-    }
-
-    (*r).tmin = max(tmin - 1.0e-4f, (*r).tmin);
-    (*r).tmax = min(tmax + 1.0e-4f, (*r).tmax);
-    return true;
-}
-
- @group(0) @binding(1) var<storage> treeIds: array<u32>;
- @group(0) @binding(2) var<storage> bspTree: array<vec4u>;
- @group(0) @binding(3) var<storage> bspPlanes: array<f32>;
-
- const MAX_LEVEL = 20u;
- const BSP_LEAF = 3u;
- var<private> branch_node: array<vec2u, MAX_LEVEL>;
- var<private> branch_ray: array<vec2f, MAX_LEVEL>;
-
-fn intersect_trimesh(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> bool
+fn intersect_trimesh(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool
 {
     var branch_lvl: u32 = 0u;
     var near_node: u32 = 0u;
@@ -60,7 +28,7 @@ fn intersect_trimesh(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> bool
             for (var j = 0u; j < node_count; j++) {
                 let obj_idx = treeIds[node_id + j];
 
-                if (intersect_triangle_indexed(*r, hit, obj_idx)) {
+                if (intersect_triangle_indexed(r, hit, obj_idx)) {
                     (*r).tmax = (*hit).dist;
                     found = true;
                 }
@@ -71,11 +39,11 @@ fn intersect_trimesh(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> bool
             } else if (branch_lvl == 0u) {
                 return false;
             } else {
-                branch_1v1--;
-                i = branch_node[branch_1v1].x;
-                node = branch_node[branch_1v1].y;
-                (*r).tmix = branch_ray[branch_1v1].x;
-                (*r).tmax = branch_ray[branch_1v1].y;
+                branch_lvl--;
+                i = branch_node[branch_lvl].x;
+                node = branch_node[branch_lvl].y;
+                (*r).tmin = branch_ray[branch_lvl].x;
+                (*r).tmax = branch_ray[branch_lvl].y;
                 continue;
             }
         }
