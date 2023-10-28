@@ -7,7 +7,7 @@ use crate::{
         texture::Texture,
         uniform::UniformGpu,
         vertex::{self, Vertex},
-        Bindable, IntoGpu,
+        Bindable, IntoGpu, create_shader_definitions,
     },
     camera::{Camera, CameraController},
     command::Command,
@@ -166,10 +166,10 @@ impl RenderState {
                 push_constant_ranges: &[],
             });
 
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../res/shaders/shader.wgsl").into()),
-        });
+        let mut shader_defs = create_shader_definitions(
+            &vec![uniform.get_bind_descriptor()]);
+        let shader = 
+        Self::create_shader_module(&device, &mut shader_defs, include_str!("../res/shaders/shader.wgsl").into()).await.unwrap();
 
         let render_pipeline =
             RenderState::create_render_pipeline(&device, &render_pipeline_layout, &shader, &config);
@@ -208,19 +208,25 @@ impl RenderState {
         );
     }
 
-    pub async fn create_shader_module(&self, shader_location: &str) -> Result<wgpu::ShaderModule> {
-        let mut file = File::open::<std::path::PathBuf>(shader_location.into())?;
+    pub async fn create_shader_module_from_file(&self, shader_location: &std::path::Path) -> Result<wgpu::ShaderModule> {
+        let mut file = File::open(shader_location)?;
         let mut shader_source = String::new();
+        let mut shader_defs = create_shader_definitions(&vec![self.uniform.get_bind_descriptor()]);
         file.read_to_string(&mut shader_source)?;
+        
+        Self::create_shader_module(&self.device, &mut shader_defs, &shader_source).await
+    }
 
-        self.device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let shader_maybe = self
-            .device
+    async fn create_shader_module(device: &wgpu::Device, shader_defs: &mut String, shader_source: &str) -> Result<wgpu::ShaderModule> {
+        shader_defs.push_str(&shader_source);
+        device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let shader_maybe =
+            device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Shader"),
-                source: wgpu::ShaderSource::Wgsl(shader_source.as_str().into()),
+                source: wgpu::ShaderSource::Wgsl(shader_defs.as_str().into()),
             });
-        let error_maybe = self.device.pop_error_scope().await;
+        let error_maybe = device.pop_error_scope().await;
         if let Some(err) = error_maybe {
             return Err(anyhow!(err.to_string()));
         }

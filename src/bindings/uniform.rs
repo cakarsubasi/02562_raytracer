@@ -1,5 +1,5 @@
-use crate::camera::Camera;
 use super::{Bindable, BufferOwner, WgslBindDescriptor};
+use crate::camera::Camera;
 
 use wgpu::util::DeviceExt;
 
@@ -27,11 +27,8 @@ impl UniformGpu {
             contents: bytemuck::cast_slice(&[uniforms]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
-        
-        Self {
-            buffer,
-            uniforms,
-        }
+
+        Self { buffer, uniforms }
     }
 }
 
@@ -90,7 +87,27 @@ impl Bindable for UniformGpu {
     }
 
     fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
-        todo!()
+        let struct_def = Some("struct Uniform {
+            camera_pos: vec3f,
+            camera_constant: f32,
+            camera_look_at: vec3f,
+            aspect_ratio: f32,
+            camera_up: vec3f,
+        };");
+
+        let bind_type = "uniform";
+        let var_name = "uniforms";
+        let var_type = "Uniform";
+
+        vec![
+            WgslBindDescriptor {
+                struct_def,
+                bind_type,
+                var_name,
+                var_type,
+                extra_code: None,
+            }
+        ]
     }
 }
 

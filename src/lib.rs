@@ -6,7 +6,7 @@ mod render_state;
 mod data_structures;
 mod bindings;
 
-use std::{thread, time::Instant};
+use std::{thread, time::Instant, path::Path};
 
 use crate::{control_panel::ControlPanel, render_state::RenderState};
 
@@ -330,7 +330,7 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                         } => match key {
                             VirtualKeyCode::Space => {
                                 let shader_module = pollster::block_on(
-                                    render_state.create_shader_module("res/shaders/shader.wgsl"),
+                                    render_state.create_shader_module_from_file(Path::new("res/shaders/shader.wgsl")),
                                 );
                                 match shader_module {
                                     Ok(module) => render_state.recreate_render_pipeline(&module),
@@ -348,7 +348,7 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                         }
                         Command::LoadShader { shader_path } => {
                             let shader_module = pollster::block_on(
-                                render_state.create_shader_module(&shader_path),
+                                render_state.create_shader_module_from_file(Path::new(&shader_path)),
                             );
                             match shader_module {
                                 Ok(module) => render_state.recreate_render_pipeline(&module),

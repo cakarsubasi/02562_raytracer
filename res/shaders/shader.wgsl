@@ -1,14 +1,5 @@
 // Vertex shader
 
-struct Uniform {
-    //view_proj: mat4x4<f32>,
-    camera_pos: vec3f,
-    camera_constant: f32,
-    camera_look_at: vec3f,
-    aspect_ratio: f32,
-    camera_up: vec3f,
-};
-
 const PI = 3.14159265359;
 const ETA = 0.000001;
 
@@ -27,11 +18,8 @@ const SHADER_TYPE_DEFAULT: u32 = 0u;
 
 const MAX_DEPTH: i32 = 10;
 
-@group(0) @binding(0)
-var<uniform> uniforms: Uniform;
-// selection TODO
-@group(0) @binding(1)
-var<uniform> selection: u32;
+//@group(0) @binding(1)
+//var<uniform> selection: u32;
 // Stratified jitter sampling array TODO
 @group(0) @binding(2)
 var<storage> jitter: array<vec2f>;
@@ -178,34 +166,43 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var result = vec3f(0.0);
     var result_textured = vec3f(1.0);
     // each loop is one bounce
+//    if (intersect_trimesh(&r, &hit)) {
+//        return vec4f(error_shader(), bgcolor.a);
+//    } else {
+//        return bgcolor;
+//    }
     if (!intersect_min_max(&r)) {
-        return bgcolor;
-    }
+        result = bgcolor.rgb;
+    } else {
+        for (var i = 0; i < max_depth; i++) {
+            if (intersect_scene_bsp(&r, &hit)) {
+                result += shade(&r, &hit);
+                if (hit.use_texture) {
+                    result_textured = texture_sample(&hit);
+                }
+            } else {
+                result += bgcolor.rgb; break;
+            }
 
-    return vec4f(error_shader(), bgcolor.a);
-    //for (var i = 0; i < max_depth; i++) {
-    //    if (intersect_scene(&r, &hit)) {
-    //        result += shade(&r, &hit);
-    //        if (hit.use_texture) {
-    //            result_textured = texture_sample(&hit);
-    //        }
-    //    } else {
-    //        result += bgcolor.rgb; break;
-    //    }
-//
-    //    if (hit.has_hit) {
-    //        break;
-    //    }
-    //}
-    //result = result * result_textured;
-    ////return vec4f(result, bgcolor.a);
-    //return vec4f(pow(result, vec3f(1.0/1.0)), bgcolor.a);
+            if (hit.has_hit) {
+                break;
+            }
+        }
+        result = result * result_textured;
+    }
+    //return vec4f(result, bgcolor.a);
+    return vec4f(pow(result, vec3f(1.0/1.0)), bgcolor.a);
 }
 
 fn texture_sample(hit: ptr<function, HitRecord>) -> vec3f {
     // Note that we are ignoring the potential alpha channel within the texture here
     // TODO: Might want to multiply alpha here
     return textureSample(texture0, sampler0, (*hit).uv0).xyz;
+}
+
+fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
+    let has_hit = intersect_trimesh(r, hit);
+    return has_hit;
 }
 
 fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
@@ -260,20 +257,23 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     let e1 = v[2] - v[0];
     let o_to_v0 = v[0] - o;
     let normal = cross(e0, e1);
-    // there is an issue with this
+
     let nom = cross(o_to_v0, w_i);
     let denom = dot(w_i, normal);
-    // The minuses shouldn't be needed but are
+    if (abs(denom) < 1e-10) {
+        return false;
+    }
+
     var eta = ETA;
     if (denom > 0.0) {
         eta = eta * -1.0;
     }
 
-    let beta = dot(nom, e1) / (denom + eta);
+    let beta = dot(nom, e1) / denom;
     if (beta < 0.0) {
         return false;
     }
-    let gamma = -dot(nom, e0) / (denom + eta);
+    let gamma = -dot(nom, e0) / denom;
     if (gamma < 0.0) {
         return false;
     }
@@ -542,24 +542,15 @@ struct Aabb {
 
 fn intersect_min_max(r: ptr<function, Ray>) -> bool
 {
-    var tmin = 1.0e32f;
-    var tmax = -1.0e32f;
-
-    for(var i = 0u; i < 3u; i++) {
-        if(abs((*r).direction[i]) > 1.0e-8f) {
-            let p1 = (aabb.min[i] - (*r).origin[i])/(*r).direction[i];
-            let p2 = (aabb.max[i] - (*r).origin[i])/(*r).direction[i];
-            let pmin = min(p1, p2);
-            let pmax = max(p1, p2);
-            tmin = min(tmin, pmin);
-            tmax = max(tmax, pmax);
-        }
-    }
-
+    let p1 = (aabb.min - (*r).origin)/(*r).direction;
+    let p2 = (aabb.max - (*r).origin)/(*r).direction;
+    let pmin = min(p1, p2);
+    let pmax = max(p1, p2);
+    let tmin = max(pmin.x, max(pmin.y, pmin.z));
+    let tmax = min(pmax.x, min(pmax.y, pmax.z));
     if (tmin > tmax || tmin > (*r).tmax || tmax < (*r).tmin) {
-        return false;
+          return false;
     }
-
     (*r).tmin = max(tmin - 1.0e-4f, (*r).tmin);
     (*r).tmax = min(tmax + 1.0e-4f, (*r).tmax);
     return true;
