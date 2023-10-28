@@ -3,10 +3,8 @@ mod command;
 mod control_panel;
 mod gpu_handles;
 mod render_state;
-mod texture;
-mod uniform;
-mod mesh;
 mod data_structures;
+mod bindings;
 
 use std::{thread, time::Instant};
 

@@ -2,7 +2,9 @@ use std::path::Path;
 
 use wgpu::util::DeviceExt;
 
-use crate::data_structures::{vector::{Vec3f32, Vec3u32}, bsp_tree::{AccObj, BspTree}, bbox::Bbox};
+use crate::data_structures::{vector::{Vec3f32, Vec3u32, vec3f32}, bsp_tree::{AccObj, BspTree}, bbox::Bbox};
+
+use super::Bindable;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -11,17 +13,10 @@ struct ModelVertex {
     _padding: f32,
 }
 
+static_assertions::assert_eq_size!(ModelVertex, [u8; 4 * 4]);
+
 impl From<Vec3f32> for ModelVertex {
     fn from(value: Vec3f32) -> Self {
-        Self {
-            position: [value.0, value.1, value.2].into(),
-            _padding: 0.0,
-        }
-    }
-}
-
-impl From<(f32, f32, f32)> for ModelVertex {
-    fn from(value: (f32, f32, f32)) -> Self {
         Self {
             position: [value.0, value.1, value.2].into(),
             _padding: 0.0,
@@ -114,11 +109,78 @@ impl Mesh {
     }
 }
 
-pub struct MeshGPU {
+pub struct MeshGpu {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
-    pub layout: wgpu::BindGroupLayout,
-    pub bind_group: wgpu::BindGroup,
+    //pub layout: wgpu::BindGroupLayout,
+    //pub bind_group: wgpu::BindGroup,
+}
+
+impl MeshGpu {
+    pub fn new(device: &wgpu::Device, mesh: &Mesh) -> Self {
+        let vertex_buffer_slice = mesh.vertices.as_slice();
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Model Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertex_buffer_slice),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+        });
+
+        let index_buffer_slice = mesh.indices.as_slice();
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Model Index Buffer"),
+            contents: bytemuck::cast_slice(&index_buffer_slice),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+        });
+
+        Self {
+            vertex_buffer,
+            index_buffer,
+        }
+    }
+}
+
+impl Bindable for MeshGpu {
+    fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
+        vec![
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ]
+    }
+
+    fn get_bind_group_entries(&self, device: &wgpu::Device) -> Vec<wgpu::BindGroupEntry> {
+        vec![
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.vertex_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.index_buffer.as_entire_binding(),
+                },
+            ]
+    }
+
+    fn get_bind_descriptor(&self) -> Vec<super::WgslBindDescriptor> {
+        todo!()
+    }
 }
 
 impl Mesh {
@@ -140,7 +202,7 @@ impl Mesh {
         models.iter().enumerate().for_each(|(idx, m)| {
             let vertices = (0..m.mesh.positions.len() / 3)
                 .map(|i| {
-                    (
+                    vec3f32(
                         m.mesh.positions[i * 3],
                         m.mesh.positions[i * 3 + 1],
                         m.mesh.positions[i * 3 + 2],
@@ -174,66 +236,7 @@ impl Mesh {
         })
     }
 
-    pub fn into_gpu(&self, device: &wgpu::Device) -> MeshGPU {
-        let vertex_buffer_slice = self.vertices.as_slice();
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Model Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertex_buffer_slice),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
-        });
-
-        let index_buffer_slice = self.indices.as_slice();
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Model Index Buffer"),
-            contents: bytemuck::cast_slice(&index_buffer_slice),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
-        });
-
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-            label: Some("vertex_index_bind_group_layout"),
-        });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: vertex_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: index_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("uniform_bind_group"),
-        });
-
-        MeshGPU {
-            vertex_buffer,
-            index_buffer,
-            layout,
-            bind_group,
-        }
+    pub fn into_gpu(&self, device: &wgpu::Device) -> MeshGpu {
+        MeshGpu::new(device, self)
     }
 }

@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use crate::bindings::bsp_tree::BspTreeGpu;
+
 use super::{
     bbox::{Bbox, BboxGpu},
     vector::Vec4u32,
@@ -32,7 +34,6 @@ impl AccObj {
         Self { idx, bbox }
     }
 }
-
 
 #[derive(Debug, Copy, Clone)]
 enum Split {
@@ -71,8 +72,6 @@ enum NodeType {
     },
 }
 
-
-
 impl BspTree {
     pub fn new(objects: Vec<AccObj>, max_depth: u32, max_objects_on_leaf: u32) -> Self {
         assert!(
@@ -97,7 +96,11 @@ impl BspTree {
         let obj_refer = objects.iter().map(|obj| obj).collect();
         let root = Node::subdivide_node(bbox, 0, max_depth, max_objects_on_leaf, &obj_refer);
 
-        Self { root, bbox, max_depth }
+        Self {
+            root,
+            bbox,
+            max_depth,
+        }
     }
 
     pub fn count(&self) -> usize {
@@ -361,10 +364,10 @@ impl Node {
 
 #[derive(Debug)]
 pub struct BspTreeIntermediate {
-    bbox: BboxGpu,
-    ids: Vec<u32>,
-    bsp_tree: Vec<Vec4u32>,
-    bsp_planes: Vec<f32>,
+    pub bbox: BboxGpu,
+    pub ids: Vec<u32>,
+    pub bsp_tree: Vec<Vec4u32>,
+    pub bsp_planes: Vec<f32>,
 }
 
 impl BspTreeIntermediate {
@@ -380,121 +383,8 @@ impl BspTreeIntermediate {
     }
 
     fn into_gpu(self, device: &wgpu::Device) -> BspTreeGpu {
-        use wgpu::util::DeviceExt;
-        let bbox_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Bounding Box Uniform"),
-            contents: bytemuck::cast_slice(&[self.bbox]),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
-        });
-
-        let ids_slice = self.ids.as_slice();
-        let ids_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("BSP id buffer"),
-            contents: bytemuck::cast_slice(ids_slice),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
-        });
-
-        let bsp_tree_slice = self.bsp_tree.as_slice();
-        let bsp_tree_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("BSP tree buffer"),
-            contents: bytemuck::cast_slice(bsp_tree_slice),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
-        });
-
-        let bsp_planes_slice = self.bsp_planes.as_slice();
-        let bsp_planes_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("BSP plane buffer"),
-            contents: bytemuck::cast_slice(bsp_planes_slice),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
-        });
-
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-            label: Some("vertex_index_bind_group_layout"),
-        });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: bbox_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: ids_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: bsp_tree_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: bsp_planes_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("uniform_bind_group"),
-        });
-
-        BspTreeGpu {
-            _intermediates: self,
-            ids: ids_buffer,
-            bsp_tree: bsp_tree_buffer,
-            bsp_planes: bsp_planes_buffer,
-            layout,
-            bind_group,
-        }
+        BspTreeGpu::new(device, self)
     }
-}
-
-pub struct BspTreeGpu {
-    // need to hold intermediates so they don't get dropped
-    _intermediates: BspTreeIntermediate,
-    pub ids: wgpu::Buffer,
-    pub bsp_tree: wgpu::Buffer,
-    pub bsp_planes: wgpu::Buffer,
-    pub layout: wgpu::BindGroupLayout,
-    pub bind_group: wgpu::BindGroup,
 }
 
 //impl BspTreeGpu {
@@ -505,7 +395,7 @@ pub struct BspTreeGpu {
 
 #[cfg(test)]
 mod bsp_tree_test {
-    use crate::mesh::Mesh;
+    use crate::bindings::mesh::Mesh;
 
     use super::*;
     use std::collections::HashSet;

@@ -1,48 +1,38 @@
 use crate::camera::Camera;
+use super::{Bindable, BufferOwner, WgslBindDescriptor};
 
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Vertex {
-    position: [f32; 3],
-}
-
-impl Vertex {
-    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[wgpu::VertexAttribute {
-                offset: 0,
-                shader_location: 0,
-                format: wgpu::VertexFormat::Float32x3,
-            }],
-        }
-    }
-}
-
-#[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniform {
-    // view_proj: [[f32; 4]; 4],
     camera_pos: [f32; 3],
-    //_padding0: f32,
     camera_constant: f32,
     camera_look_at: [f32; 3],
-    //_padding1: f32,
     aspect_ratio: f32,
     camera_up: [f32; 3],
-    //_padding2: f32,
-    //_padding3: f32,
     _padding4: f32,
 }
 
-pub trait BindGroup {
-    fn create_bind_group(
-        self,
-        device: &wgpu::Device,
-    ) -> (wgpu::Buffer, wgpu::BindGroupLayout, wgpu::BindGroup);
+pub struct UniformGpu {
+    pub uniforms: Uniform,
+    pub buffer: wgpu::Buffer,
+}
+
+impl UniformGpu {
+    pub fn new(device: &wgpu::Device) -> Self {
+        let uniforms = Uniform::new();
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Uniform buffer"),
+            contents: bytemuck::cast_slice(&[uniforms]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        
+        Self {
+            buffer,
+            uniforms,
+        }
+    }
 }
 
 impl Uniform {
@@ -72,42 +62,56 @@ impl Uniform {
     }
 }
 
-impl BindGroup for Uniform {
+impl BufferOwner for UniformGpu {
+    fn update_buffer(&self, queue: &wgpu::Queue) {
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
+    }
+}
+
+impl Bindable for UniformGpu {
+    fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
+        vec![wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }]
+    }
+
+    fn get_bind_group_entries(&self, device: &wgpu::Device) -> Vec<wgpu::BindGroupEntry> {
+        vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: self.buffer.as_entire_binding(),
+        }]
+    }
+
+    fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
+        todo!()
+    }
+}
+
+impl UniformGpu {
     fn create_bind_group(
         self,
         device: &wgpu::Device,
     ) -> (wgpu::Buffer, wgpu::BindGroupLayout, wgpu::BindGroup) {
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Uniform buffer"),
-            contents: bytemuck::cast_slice(&[self]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
+            entries: self.get_layout_entries().as_ref(),
             label: Some("uniform_bind_group_layout"),
         });
         let bindgroup = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
+            entries: self.get_bind_group_entries(device).as_ref(),
             label: Some("uniform_bind_group"),
         });
-        (buffer, layout, bindgroup)
+        (self.buffer, layout, bindgroup)
     }
 }
-
-#[allow(dead_code)]
 
 //fn compute_jitters(jitter: f32, pixel_size: f32, subdivs: u32) -> Vec<(f32, f32)> {
 //    assert!(subdivs <= 10);
@@ -129,20 +133,3 @@ impl BindGroup for Uniform {
 //    todo!();
 //    jitter_vectors
 //}
-
-pub const VERTICES: &[Vertex] = &[
-    Vertex {
-        position: [-1.0, -1.0, 0.0],
-    }, // A
-    Vertex {
-        position: [-1.0, 1.0, 0.0],
-    }, // B
-    Vertex {
-        position: [1.0, 1.0, 0.0],
-    }, // C
-    Vertex {
-        position: [1.0, -1.0, 0.0],
-    }, // D
-];
-
-pub const INDICES: &[u16] = &[2, 1, 0, 0, 3, 2];

@@ -1,9 +1,8 @@
 use wgpu;
 use winit::{window::{Window, WindowId}, event_loop::EventLoop};
 use crate::{
-    texture,
     camera::{Camera, CameraController},
-    uniform::{self, Uniform, Vertex, BindGroup}, command::Command, mesh::{Mesh, MeshGPU}, data_structures::bsp_tree::BspTreeGpu};
+    bindings::{Bindable, uniform::{self, Uniform, UniformGpu}, vertex::{self, Vertex}, mesh::{Mesh, MeshGpu}, texture::{Texture}, create_bind_group_layouts, create_bind_groups, bsp_tree::BspTreeGpu}, command::Command};
 
 use anyhow::*;
 
@@ -23,16 +22,15 @@ pub struct RenderState {
     window: Window,
     render_pipeline_layout: wgpu::PipelineLayout,
     render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    num_indices: u32,
+    vertex_buffer: wgpu::Buffer, // Buffer 1
+    index_buffer: wgpu::Buffer, // Buffer 2
+    num_indices: u32, // relevant info
     camera: Camera,
-    uniform: Uniform,
-    uniform_buffer: wgpu::Buffer,
-    uniform_bind_group: wgpu::BindGroup,
-    texture_bind_group: wgpu::BindGroup,
-    mesh_handle: MeshGPU,
-    bsp_tree_handle: BspTreeGpu,
+    uniform: UniformGpu,
+    texture: Texture,
+    mesh_handle: MeshGpu,
+    bsp_tree_handle: BspTreeGpu, // Bunch of stuff
+    bind_groups: Vec<wgpu::BindGroup>,
     time_of_last_render: std::time::Instant,
     camera_controller: CameraController,
 }
@@ -116,20 +114,15 @@ impl RenderState {
         };
 
         // Uniform variables
-        let uniform = Uniform::new();
-        let uniform_bg = uniform.create_bind_group(&device);
-        let (uniform_buffer, uniform_bind_group_layout, uniform_bind_group) = uniform_bg;
+        let uniform = UniformGpu::new(&device);        
 
         // load texture
         let texture_bytes = include_bytes!("../res/textures/grass.jpg");
-        let texture = texture::Texture::from_bytes(&device, &queue, texture_bytes, "grass.jpg").unwrap();
-        let texture_bg = texture.create_bind_group(&device);
-        let (texture_bind_group_layout, texture_bind_group) = texture_bg;
+        let texture = Texture::from_bytes(&device, &queue, texture_bytes, "grass.jpg").unwrap();
 
         // load model
-        let mut model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
-        //eprintln!("{model}");
-        model.scale(1f32 / 300f32);
+        let mut model = Mesh::from_obj("res/models/teapot.obj").expect("Failed to load model");
+        model.scale(1f32 / 3f32);
         let mesh_handle = model.into_gpu(&device);
 
         // create and load the BSP
@@ -141,12 +134,20 @@ impl RenderState {
             source: wgpu::ShaderSource::Wgsl(include_str!("../res/shaders/shader.wgsl").into()),
         });
 
+        let layout_entries = 
+        vec![uniform.get_layout_entries(), texture.get_layout_entries(), mesh_handle.get_layout_entries(), bsp_tree_handle.get_layout_entries()];
+        let bind_group_layouts = create_bind_group_layouts(&device, layout_entries);
+
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout, &mesh_handle.layout, &bsp_tree_handle.layout],
+            bind_group_layouts: &[&bind_group_layouts[0], &bind_group_layouts[1], &bind_group_layouts[2], &bind_group_layouts[3]],
             push_constant_ranges: &[],
         }
         );
+        
+        let bind_group_entries = 
+        vec![uniform.get_bind_group_entries(&device), texture.get_bind_group_entries(&device), mesh_handle.get_bind_group_entries(&device), bsp_tree_handle.get_bind_group_entries(&device)];
+        let bind_groups = create_bind_groups(&device, bind_group_entries, bind_group_layouts);
 
         let render_pipeline = RenderState::create_render_pipeline(
             &device,
@@ -157,7 +158,7 @@ impl RenderState {
         let vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(uniform::VERTICES),
+            contents: bytemuck::cast_slice(vertex::VERTICES),
             usage: wgpu::BufferUsages::VERTEX,
             }
         );
@@ -165,12 +166,12 @@ impl RenderState {
         let index_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(uniform::INDICES),
+                contents: bytemuck::cast_slice(vertex::INDICES),
                 usage: wgpu::BufferUsages::INDEX,
             }
         );
 
-        let num_indices = uniform::INDICES.len() as u32;
+        let num_indices = vertex::INDICES.len() as u32;
 
         let time_of_last_render = std::time::Instant::now();
 
@@ -187,10 +188,9 @@ impl RenderState {
             index_buffer,
             num_indices,
             camera,
+            bind_groups,
             uniform,
-            uniform_buffer,
-            uniform_bind_group,
-            texture_bind_group,
+            texture,
             mesh_handle,
             bsp_tree_handle,
             camera_controller,
@@ -295,8 +295,8 @@ impl RenderState {
     pub fn update(&mut self) {
         self.camera.aspect = self.aspect_ratio();
         self.camera_controller.update_camera(&mut self.camera);
-        self.uniform.update(&self.camera);
-        self.queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[self.uniform]));
+        self.uniform.uniforms.update(&self.camera);
+        self.queue.write_buffer(&self.uniform.buffer, 0, bytemuck::cast_slice(&[self.uniform.uniforms]));
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -337,10 +337,10 @@ impl RenderState {
 
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-        render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-        render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
-        render_pass.set_bind_group(2, &self.mesh_handle.bind_group, &[]);
-        render_pass.set_bind_group(3, &self.bsp_tree_handle.bind_group, &[]);
+        render_pass.set_bind_group(0, &self.bind_groups[0], &[]);
+        render_pass.set_bind_group(1, &self.bind_groups[1], &[]);
+        render_pass.set_bind_group(2, &self.bind_groups[2], &[]);
+        render_pass.set_bind_group(3, &self.bind_groups[3], &[]);
         render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         
         drop(render_pass);
