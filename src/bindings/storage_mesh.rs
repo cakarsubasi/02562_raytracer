@@ -2,7 +2,7 @@ use std::path::Path;
 
 use wgpu::util::DeviceExt;
 
-use crate::data_structures::{vector::{Vec3f32, Vec3u32, vec3f32}, bsp_tree::{AccObj, BspTree}, bbox::Bbox};
+use crate::{data_structures::{vector::{Vec3f32, Vec3u32, vec3f32}, bsp_tree::{AccObj, BspTree}, bbox::Bbox}, bindings::{WgslBindDescriptor, WgslSource}};
 
 use super::Bindable;
 
@@ -179,8 +179,24 @@ impl Bindable for StorageMeshGpu {
             ]
     }
 
-    fn get_bind_descriptor(&self) -> Vec<super::WgslBindDescriptor> {
-        todo!()
+    fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
+        // TODO: need to differentiate names
+        vec![
+            WgslBindDescriptor {
+                struct_def: None,
+                bind_type: Some("storage"),
+                var_name: "vertexBuffer",
+                var_type: "array<vec4f>",
+                extra_code: None,
+            },
+            WgslBindDescriptor {
+                struct_def: None,
+                bind_type: Some("storage"),
+                var_name: "indexBuffer",
+                var_type: "array<vec4u>",
+                extra_code: None,
+            }
+        ]
     }
 }
 

@@ -1,6 +1,8 @@
 use anyhow::*;
 use image::GenericImageView;
 
+use crate::bindings::WgslSource;
+
 use super::{Bindable, WgslBindDescriptor};
 
 // Taken from learnwgpu
@@ -120,6 +122,22 @@ impl Bindable for Texture {
     }
 
     fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
-        todo!()
+        // TODO: need to differentiate textures
+        vec![
+            WgslBindDescriptor {
+                struct_def: None,
+                bind_type: None,
+                var_name: "sampler0",
+                var_type: "sampler",
+                extra_code: None,
+            },
+            WgslBindDescriptor {
+                struct_def: None,
+                bind_type: None,
+                var_name: "texture0",
+                var_type: "texture_2d<f32>",
+                extra_code: None,
+            }
+        ]
     }
 }

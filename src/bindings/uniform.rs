@@ -1,5 +1,5 @@
 use super::{Bindable, BufferOwner, WgslBindDescriptor};
-use crate::camera::Camera;
+use crate::{camera::Camera, bindings::WgslSource};
 
 use wgpu::util::DeviceExt;
 
@@ -102,7 +102,7 @@ impl Bindable for UniformGpu {
         vec![
             WgslBindDescriptor {
                 struct_def,
-                bind_type,
+                bind_type: Some(bind_type),
                 var_name,
                 var_type,
                 extra_code: None,

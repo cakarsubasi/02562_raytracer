@@ -167,7 +167,7 @@ impl RenderState {
             });
 
         let mut shader_defs = create_shader_definitions(
-            &vec![uniform.get_bind_descriptor()]);
+            &vec![uniform.get_bind_descriptor(), texture.get_bind_descriptor(), mesh_handle.get_bind_descriptor(), bsp_tree_handle.get_bind_descriptor()]);
         let shader = 
         Self::create_shader_module(&device, &mut shader_defs, include_str!("../res/shaders/shader.wgsl").into()).await.unwrap();
 
@@ -211,7 +211,8 @@ impl RenderState {
     pub async fn create_shader_module_from_file(&self, shader_location: &std::path::Path) -> Result<wgpu::ShaderModule> {
         let mut file = File::open(shader_location)?;
         let mut shader_source = String::new();
-        let mut shader_defs = create_shader_definitions(&vec![self.uniform.get_bind_descriptor()]);
+        let mut shader_defs = create_shader_definitions(
+            &vec![self.uniform.get_bind_descriptor(), self.texture.get_bind_descriptor(), self.mesh_handle.get_bind_descriptor(), self.bsp_tree_handle.get_bind_descriptor()]);
         file.read_to_string(&mut shader_source)?;
         
         Self::create_shader_module(&self.device, &mut shader_defs, &shader_source).await

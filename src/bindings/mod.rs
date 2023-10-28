@@ -1,3 +1,5 @@
+use std::{fs::File, path::Path, io::prelude::*};
+
 pub mod bsp_tree;
 pub mod mesh;
 pub mod storage_mesh;
@@ -53,7 +55,11 @@ pub fn create_shader_definitions(vec_of_descriptors: &Vec<Vec<WgslBindDescriptor
     let mut string = String::new();
     for (group_id, descriptors) in vec_of_descriptors.iter().enumerate() {
         for (binding_id, descriptor) in descriptors.iter().enumerate() {
-            string.push_str(&generate_wgsl_string(group_id as u32, binding_id as u32, descriptor));
+            string.push_str(&generate_wgsl_string(
+                group_id as u32,
+                binding_id as u32,
+                descriptor,
+            ));
         }
     }
     string
@@ -69,12 +75,18 @@ pub trait IntoGpu {
     fn into_gpu(&self, device: &wgpu::Device) -> Self::Output;
 }
 
+#[derive(Clone, Copy)]
+pub enum WgslSource<'a> {
+    Str(&'a str),
+    File(&'a str), // important to avoid redefinitions
+}
+
 pub struct WgslBindDescriptor<'a> {
     pub struct_def: Option<&'a str>,
-    pub bind_type: &'a str,
+    pub bind_type: Option<&'a str>,
     pub var_name: &'a str,
     pub var_type: &'a str,
-    pub extra_code: Option<&'a str>,
+    pub extra_code: Option<WgslSource<'a>>,
 }
 
 fn generate_wgsl_string(
@@ -90,14 +102,33 @@ fn generate_wgsl_string(
         extra_code,
     } = *bind_descriptor; // user provided
 
+    let bind_type = if let Some(bind_type) = bind_type {
+        format!("<{bind_type}>")
+    } else {
+        "".into()
+    };
+    let mut string: String;
+    let extra_code = match extra_code {
+        None => "",
+        Some(name) => match name {
+            WgslSource::Str(string) => string,
+            WgslSource::File(path) => {
+                let mut file = File::open(Path::new(path)).expect(format!("File path {path} is invalid").as_str());
+                string = String::new();
+                file.read_to_string(&mut string).expect(format!("failed to read {path}").as_str());
+                string.as_str()
+            }
+        },
+    };
+
     format!(
         "
     {}\n
     @group({group_id}) @binding({binding_id})\n
-    var<{bind_type}> {var_name}: {var_type};\n
+    var{bind_type} {var_name}: {var_type};\n
     {}\n",
         struct_def.unwrap_or(""),
-        extra_code.unwrap_or("")
+        extra_code
     )
 }
 
@@ -126,12 +157,12 @@ mod tests {
             group_id,
             binding_id,
             &WgslBindDescriptor {
-            struct_def: Some(struct_def),
-            bind_type,
-            var_name,
-            var_type,
-            extra_code: None,
-            }
+                struct_def: Some(struct_def),
+                bind_type: Some(bind_type),
+                var_name,
+                var_type,
+                extra_code: None,
+            },
         );
     }
 }
