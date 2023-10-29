@@ -11,7 +11,9 @@ pub struct Uniform {
     camera_look_at: [f32; 3],
     aspect_ratio: f32,
     camera_up: [f32; 3],
-    _padding4: f32,
+    selection1: u32,
+    selection2: u32,
+    _padding0: [u32; 3],
 }
 
 pub struct UniformGpu {
@@ -41,21 +43,27 @@ impl Uniform {
             camera_up: [0.0, 0.0, 0.0],
             camera_constant: 1.0,
             aspect_ratio: 1.0,
-            //_padding0: 0.0,
-            //_padding1: 0.0,
-            //_padding2: 0.0,
-            //_padding3: 0.0,
-            _padding4: 0.0,
+            selection1: 0,
+            selection2: 0,
+            _padding0: [0, 0, 0],
         }
     }
 
-    pub fn update(&mut self, camera: &Camera) {
+    pub fn update_camera(&mut self, camera: &Camera) {
         // self.view_proj = camera.build_view_projection_matrix().into();
         self.camera_pos = camera.eye.into();
         self.camera_look_at = camera.target.into();
         self.camera_up = camera.up.into();
         self.camera_constant = camera.constant;
         self.aspect_ratio = camera.aspect;
+    }
+
+    pub fn update_sphere_selection(&mut self, selection: u32) {
+        self.selection1 = selection;
+    }
+
+    pub fn update_other_selection(&mut self, selection: u32) {
+        self.selection2 = selection;
     }
 }
 
@@ -87,13 +95,16 @@ impl Bindable for UniformGpu {
     }
 
     fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
-        let struct_def = Some("struct Uniform {
-            camera_pos: vec3f,
-            camera_constant: f32,
-            camera_look_at: vec3f,
-            aspect_ratio: f32,
-            camera_up: vec3f,
-        };");
+        let struct_def = Some(
+"struct Uniform {
+    camera_pos: vec3f,
+    camera_constant: f32,
+    camera_look_at: vec3f,
+    aspect_ratio: f32,
+    camera_up: vec3f,
+    selection1: u32,
+    selectioni2: u32,
+};");
 
         let bind_type = "uniform";
         let var_name = "uniforms";

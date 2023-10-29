@@ -5,7 +5,7 @@ use crate::{
         mesh::MeshGpu,
         storage_mesh::{Mesh, StorageMeshGpu},
         texture::Texture,
-        uniform::UniformGpu,
+        uniform::{UniformGpu, Uniform},
         vertex::{self, Vertex},
         Bindable, IntoGpu, create_shader_definitions,
     },
@@ -35,13 +35,12 @@ pub struct RenderState {
     render_pipeline_layout: wgpu::PipelineLayout,
     render_pipeline: wgpu::RenderPipeline,
     mesh_direct: MeshGpu,
-    camera: Camera,
+    pub camera: Camera,
     uniform: UniformGpu,
     texture: Texture,
     mesh_handle: StorageMeshGpu,
     bsp_tree_handle: BspTreeGpu, // Bunch of stuff
     bind_groups: Vec<wgpu::BindGroup>,
-    time_of_last_render: std::time::Instant,
     camera_controller: CameraController,
 }
 
@@ -103,7 +102,7 @@ impl RenderState {
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: surface_caps.present_modes[0],
+            present_mode: wgpu::PresentMode::Fifo,//surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -174,8 +173,6 @@ impl RenderState {
 
         let mesh_direct = MeshGpu::new(&device, vertex::VERTICES, vertex::INDICES);
 
-        let time_of_last_render = std::time::Instant::now();
-
         Self {
             window,
             surface,
@@ -193,7 +190,6 @@ impl RenderState {
             mesh_handle,
             bsp_tree_handle,
             camera_controller,
-            time_of_last_render,
         }
     }
 
@@ -288,6 +284,10 @@ impl RenderState {
         self.window().id()
     }
 
+    pub fn uniform(&mut self) -> &mut Uniform {
+        &mut self.uniform.uniforms
+    }
+
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
@@ -306,7 +306,7 @@ impl RenderState {
     pub fn update(&mut self) {
         self.camera.aspect = self.aspect_ratio();
         self.camera_controller.update_camera(&mut self.camera);
-        self.uniform.uniforms.update(&self.camera);
+        self.uniform.uniforms.update_camera(&self.camera);
         self.queue.write_buffer(
             &self.uniform.buffer,
             0,
@@ -314,11 +314,7 @@ impl RenderState {
         );
     }
 
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let current_time: std::time::Instant = std::time::Instant::now();
-        let _time_delta: std::time::Duration = current_time - self.time_of_last_render;
-        self.time_of_last_render = current_time;
-
+    pub fn render(&self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
 
         let view = output
