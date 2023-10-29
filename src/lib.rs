@@ -5,6 +5,7 @@ mod gpu_handles;
 mod render_state;
 mod data_structures;
 mod bindings;
+mod tools;
 
 use std::{thread, time::Instant, path::Path};
 
@@ -17,6 +18,7 @@ Boilerplate code from https://sotrh.github.io/learn-wgpu/
 use command::Command;
 use crossbeam_channel::{unbounded, Receiver, Sender, RecvTimeoutError};
 use gpu_handles::GPUHandles;
+use tools::RenderStats;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -298,24 +300,34 @@ pub async fn run() {
 
 fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>) {
     let mut command_count = 0;
-    let max_commands = 5;
+    let max_commands = 500;
     let mut should_render = true;
+    let mut render_stats = RenderStats::new();
     loop {
         if should_render {
-            match render_state.render() {
-                Ok(_) => {}
-                // Reconfigure the surface if lost
-                Err(wgpu::SurfaceError::Lost) => render_state.resize(render_state.size),
-                // The system is out of memory, we should probably quit
-                Err(wgpu::SurfaceError::OutOfMemory) => break,
-                // All other errors (Outdated, Timeout) should be resolved by the next frame
-                Err(e) => eprintln!("{:?}", e),
-            }
+            render_stats.begin_capture();
+            thread::scope(|s| {
+                s.spawn(|| {
+                    match render_state.render() {
+                        Ok(_) => {}
+                        // Reconfigure the surface if lost
+                        Err(wgpu::SurfaceError::Lost) => render_state.resize(render_state.size),
+                        // The system is out of memory, we should probably quit
+                        Err(wgpu::SurfaceError::OutOfMemory) => {panic!("out of memory")},
+                        // All other errors (Outdated, Timeout) should be resolved by the next frame
+                        Err(e) => eprintln!("{:?}", e),
+                    }
+                    render_stats.end_capture();
+                    if render_stats.total > std::time::Duration::from_secs(5) {
+                        println!("{render_stats}");
+                        render_stats.reset();
+                    }
+                });
+            });
         }
         render_state.update();
         loop {
-            // evil 60 fps hack (note: I will change this but this is a dirty way of preventing GPU from doing too much work)
-            match receiver.recv_timeout(std::time::Duration::from_millis(16)) {
+            match receiver.recv_timeout(std::time::Duration::from_millis(1)) {
                 Err(RecvTimeoutError::Timeout) => break,
                 Err(_err) => break,
                 Ok(command) => {
@@ -329,15 +341,7 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                             state: ElementState::Pressed,
                         } => match key {
                             VirtualKeyCode::Space => {
-                                let shader_module = pollster::block_on(
-                                    render_state.create_shader_module_from_file(Path::new("res/shaders/shader.wgsl")),
-                                );
-                                match shader_module {
-                                    Ok(module) => render_state.recreate_render_pipeline(&module),
-                                    Err(err) => {
-                                        eprintln!("{err}")
-                                    }
-                                }
+                                load_shader(render_state, "res/shaders/shader.wgsl")
                             }
                             _ => {}
                         },
@@ -347,20 +351,24 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                             };
                         }
                         Command::LoadShader { shader_path } => {
-                            let shader_module = pollster::block_on(
-                                render_state.create_shader_module_from_file(Path::new(&shader_path)),
-                            );
-                            match shader_module {
-                                Ok(module) => render_state.recreate_render_pipeline(&module),
-                                Err(err) => {
-                                    eprintln!("{err}")
-                                }
-                            }
+                            load_shader(render_state, &shader_path)
                         }
                         Command::Render { value } => {
                             should_render = value;
                         }
-                        _ => {}
+                        Command::SetCameraConstant { constant } => {
+                            render_state.camera.constant = constant;
+                        }
+                        Command::SetSphereMaterial { material } => {
+                            render_state.uniform().update_sphere_selection(material as u32);
+                        }
+                        Command::SetOtherMaterial { material } => {
+                            render_state.uniform().update_other_selection(material as u32);
+                        }
+                        
+                        other => {
+                            eprintln!("Detected and dropped command {other:?}");
+                        }
                     }
                     command_count += 1;
                     if command_count == max_commands {
@@ -369,6 +377,18 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                     }
                 }
             }
+        }
+    }
+}
+
+fn load_shader(render_state: &mut RenderState, shader_path: &str) {
+    let shader_module = pollster::block_on(
+        render_state.create_shader_module_from_file(Path::new(shader_path)),
+    );
+    match shader_module {
+        Ok(module) => render_state.recreate_render_pipeline(&module),
+        Err(err) => {
+            eprintln!("{err}")
         }
     }
 }

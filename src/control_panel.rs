@@ -1,6 +1,8 @@
 // Heavily based on: https://github.com/hasenbanck/egui_example/blob/master/src/main.rs
 
-use std::{iter, time::Instant, env};
+use std::{env, iter, time::Instant};
+
+use strum::IntoEnumIterator;
 
 use crossbeam_channel::Sender;
 use egui::{ClippedPrimitive, Context, FontDefinitions, FullOutput, Response, ScrollArea, Ui};
@@ -16,7 +18,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::{command::Command, gpu_handles::GPUHandles};
+use crate::{command::{Command, ShaderType}, gpu_handles::GPUHandles};
 
 pub struct ControlPanel {
     pub window_id: WindowId,
@@ -28,8 +30,9 @@ pub struct ControlPanel {
     render_pass: RenderPass,
     // All of our buttons' state
     should_render: bool,
-    rotate_triangle: bool,
-    triangle_speed: f32,
+    camera_constant: f32,
+    sphere_material: ShaderType,
+    other_material: ShaderType,
     scene_path: String,
 }
 
@@ -93,8 +96,9 @@ impl ControlPanel {
             render_pass,
             platform,
             should_render: true,
-            rotate_triangle: true,
-            triangle_speed: 0.5,
+            camera_constant: 1.0,
+            sphere_material: ShaderType::Lambertian,
+            other_material: ShaderType::Lambertian,
             scene_path: path,
             window_id,
         }
@@ -104,7 +108,6 @@ impl ControlPanel {
     // values to the render engine, otherwise the values won't
     // be used until the buttons are used.
     pub fn initialize(&self, commands: &Sender<Command>) {
-
         commands
             .send(Command::Render {
                 value: self.should_render,
@@ -232,45 +235,20 @@ impl ControlPanel {
                         };
                     });
 
-                    // Rotate triangle section
-                    // Toggle, speed value and event handling
-                    ui.horizontal(|ui: &mut Ui| {
-                        if ui
-                            .checkbox(&mut self.rotate_triangle, "Rotate Triangle")
-                            .changed()
-                        {
-    
-                        };
-                        ui.label("Triangle Speed");
-                        let triangle_speed_response: Response = ui.add(
-                            egui::widgets::DragValue::new(&mut self.triangle_speed)
-                                .clamp_range(-std::f32::consts::TAU..=std::f32::consts::TAU)
-                                .fixed_decimals(1)
-                                .speed(0.1),
-                        );
-
-                        if triangle_speed_response.gained_focus() {
-                            *has_focus = true;
-                            *redraw_gui = true;
-                        }
-                        if triangle_speed_response.lost_focus() {
-                            *has_focus = false;
-                        }
-                        if triangle_speed_response.changed() {
-   
-                        };
-                    });
-
                     // Load different shaders
                     ui.horizontal(|ui: &mut Ui| {
                         let load_scene_button = ui.button("Load Scene");
-                
+
                         if load_scene_button.changed() {
                             *redraw_gui = true;
                         };
 
                         if load_scene_button.clicked() {
-                            commands.send(Command::LoadShader { shader_path: self.scene_path.clone() }).unwrap();
+                            commands
+                                .send(Command::LoadShader {
+                                    shader_path: self.scene_path.clone(),
+                                })
+                                .unwrap();
                         }
 
                         ui.label("Path");
@@ -286,19 +264,60 @@ impl ControlPanel {
                         }
                     });
 
-                    // This button opens a file dialog and 
+                    // This button opens a file dialog and
                     // sets the scene_path to that path.
                     ui.horizontal(|ui: &mut Ui| {
                         if ui.button("Open file..").clicked() {
-                            if let Some(path) = 
-                            rfd::FileDialog::new()
-                            .set_directory(env::current_dir().unwrap())
-                            .add_filter("WGSL Shaders (*.wgsl)", &["wgsl"])
-                            .pick_file() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .set_directory(env::current_dir().unwrap())
+                                .add_filter("WGSL Shaders (*.wgsl)", &["wgsl"])
+                                .pick_file()
+                            {
                                 self.scene_path = path.display().to_string();
                             }
                         }
                     });
+
+                    ui.horizontal(|ui: &mut Ui| {
+                        ui.label("Camera constant");
+                        let camera_constant: Response = ui.add(
+                            egui::widgets::DragValue::new(&mut self.camera_constant)
+                                .clamp_range(0.1..=10.0)
+                                .fixed_decimals(1)
+                                .speed(0.1),
+                        );
+                        if camera_constant.changed() {
+                            commands.send(Command::SetCameraConstant { constant: self.camera_constant }).unwrap();
+                        }
+                    });
+
+                    ui.horizontal(|ui: &mut Ui| {
+                        egui::ComboBox::from_label("Sphere Material")
+                        .selected_text(format!("{:?}", self.sphere_material))
+                        .show_ui(ui, |ui| {
+                            for material_type in ShaderType::iter() {
+                                let type_str: &'static str = material_type.into();
+                                if ui.selectable_value(&mut self.sphere_material, material_type, type_str).clicked() {
+                                    commands.send(Command::SetSphereMaterial { material: self.sphere_material }).unwrap();
+                                }
+                            }
+                        });
+                    });
+
+                    ui.horizontal(|ui: &mut Ui| {
+                        egui::ComboBox::from_label("Other Material")
+                        .selected_text(format!("{:?}", self.other_material))
+                        .show_ui(ui, |ui| {
+                            for material_type in ShaderType::iter() {
+                                let type_str: &'static str = material_type.into();
+                                if ui.selectable_value(&mut self.other_material, material_type, type_str).clicked() {
+                                    commands.send(Command::SetOtherMaterial { material: self.other_material }).unwrap();
+                                }
+                            }
+                        });
+                    });
+
+
                 });
             });
         });

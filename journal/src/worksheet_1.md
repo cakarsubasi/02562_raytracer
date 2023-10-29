@@ -37,9 +37,7 @@ Also need to fix up the color
 
 # 5. Uniform variables, Zoom and Aspect Ratio
 
-Not done, zoom is done by moving the camera right now
-
-Need images, need tag
+Done, need images, need tag
 
 # 6. Basic shading
 

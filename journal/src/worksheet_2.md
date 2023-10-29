@@ -14,6 +14,8 @@ Done, need images, need tag
 
 ## 2.b. Sphere material selection
 
+Added material selection option but not the selection itself
+
 Not done, also not done is the base color only shader
 
 ### 3. Refraction
