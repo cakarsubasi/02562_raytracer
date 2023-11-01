@@ -18,7 +18,10 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::{command::{Command, ShaderType}, gpu_handles::GPUHandles};
+use crate::{
+    command::{Command, ShaderType, SceneDescriptor, get_scenes},
+    gpu_handles::GPUHandles,
+};
 
 pub struct ControlPanel {
     pub window_id: WindowId,
@@ -28,12 +31,17 @@ pub struct ControlPanel {
     pub platform: Platform,
     config: wgpu::SurfaceConfiguration,
     render_pass: RenderPass,
+    // Scenes
+    scenes: Vec<SceneDescriptor>,
+    current_scene: String,
     // All of our buttons' state
     should_render: bool,
     camera_constant: f32,
     sphere_material: ShaderType,
     other_material: ShaderType,
+    use_texture: bool,
     scene_path: String,
+    model_path: String,
 }
 
 impl ControlPanel {
@@ -86,7 +94,8 @@ impl ControlPanel {
             surface.get_capabilities(&gpu_handles.adapter).formats[0];
         let render_pass: RenderPass = RenderPass::new(&gpu_handles.device, surface_format, 1);
 
-        let path: String = "".to_string();
+        let path = String::from("");
+        let model = String::from("");
         let window_id: WindowId = window.id();
 
         ControlPanel {
@@ -100,7 +109,11 @@ impl ControlPanel {
             sphere_material: ShaderType::Lambertian,
             other_material: ShaderType::Lambertian,
             scene_path: path,
+            model_path: model,
+            use_texture: false,
             window_id,
+            scenes: get_scenes(),
+            current_scene: "Default".into()
         }
     }
 
@@ -234,92 +247,185 @@ impl ControlPanel {
                                 .unwrap()
                         };
                     });
+                    self.create_scene_selection_ui(ui, commands);
+                    self.create_path_ui(ui, commands, has_focus, redraw_gui);
+                    self.create_basic_scene_ui(ui, commands);
+                    
+                });
+            });
+        });
+    }
 
-                    // Load different shaders
-                    ui.horizontal(|ui: &mut Ui| {
-                        let load_scene_button = ui.button("Load Scene");
+    fn create_path_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>, has_focus: &mut bool, redraw_gui: &mut bool) {
+        // Load different shaders
+        ui.horizontal(|ui: &mut Ui| {
+            let load_scene_button = ui.button("Load Shader");
 
-                        if load_scene_button.changed() {
-                            *redraw_gui = true;
-                        };
+            if load_scene_button.changed() {
+                *redraw_gui = true;
+            };
 
-                        if load_scene_button.clicked() {
+            if load_scene_button.clicked() {
+                commands
+                    .send(Command::LoadShader {
+                        shader_path: self.scene_path.clone(),
+                    })
+                    .unwrap();
+            }
+
+            ui.label("Path");
+
+            let text_edit_singleline_response: Response =
+                ui.text_edit_singleline(&mut self.scene_path);
+            if text_edit_singleline_response.gained_focus() {
+                *has_focus = true;
+                *redraw_gui = true;
+            }
+            if text_edit_singleline_response.lost_focus() {
+                *has_focus = false;
+            }
+        });
+
+        // This button opens a file dialog and
+        // sets the scene_path to that path.
+        ui.horizontal(|ui: &mut Ui| {
+            if ui.button("Open file..").clicked() {
+                if let Some(path) = rfd::FileDialog::new()
+                    .set_directory(env::current_dir().unwrap())
+                    .add_filter("WGSL Shaders (*.wgsl)", &["wgsl"])
+                    .pick_file()
+                {
+                    self.scene_path = path.display().to_string();
+                }
+            }
+        });
+
+        // load different models
+        ui.horizontal(|ui: &mut Ui| {
+            let load_scene_button = ui.button("Load Model");
+
+            if load_scene_button.changed() {
+                *redraw_gui = true;
+            };
+
+            if load_scene_button.clicked() {
+                commands
+                    .send(Command::LoadShader {
+                        shader_path: self.scene_path.clone(),
+                    })
+                    .unwrap();
+            }
+
+            ui.label("Path");
+
+            let text_edit_singleline_response: Response =
+                ui.text_edit_singleline(&mut self.scene_path);
+            if text_edit_singleline_response.gained_focus() {
+                *has_focus = true;
+                *redraw_gui = true;
+            }
+            if text_edit_singleline_response.lost_focus() {
+                *has_focus = false;
+            }
+        });
+
+        // This button opens a file dialog and
+        // sets the scene_path to that path.
+        ui.horizontal(|ui: &mut Ui| {
+            if ui.button("Open file..").clicked() {
+                if let Some(path) = rfd::FileDialog::new()
+                    .set_directory(env::current_dir().unwrap())
+                    .add_filter("WGSL Shaders (*.wgsl)", &["wgsl"])
+                    .pick_file()
+                {
+                    self.scene_path = path.display().to_string();
+                }
+            }
+        });
+    }
+
+    fn create_basic_scene_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>) {
+
+        ui.horizontal(|ui: &mut Ui| {
+            ui.label("Camera constant");
+            let camera_constant: Response = ui.add(
+                egui::widgets::DragValue::new(&mut self.camera_constant)
+                    .clamp_range(0.1..=10.0)
+                    .fixed_decimals(1)
+                    .speed(0.1),
+            );
+            if camera_constant.changed() {
+                commands
+                    .send(Command::SetCameraConstant {
+                        constant: self.camera_constant,
+                    })
+                    .unwrap();
+            }
+        });
+
+        ui.horizontal(|ui: &mut Ui| {
+            egui::ComboBox::from_label("Sphere Material")
+                .selected_text(format!("{:?}", self.sphere_material))
+                .show_ui(ui, |ui| {
+                    for material_type in ShaderType::iter() {
+                        let type_str: &'static str = material_type.into();
+                        if ui
+                            .selectable_value(
+                                &mut self.sphere_material,
+                                material_type,
+                                type_str,
+                            )
+                            .clicked()
+                        {
                             commands
-                                .send(Command::LoadShader {
-                                    shader_path: self.scene_path.clone(),
+                                .send(Command::SetSphereMaterial {
+                                    material: self.sphere_material,
                                 })
                                 .unwrap();
                         }
+                    }
+                });
+        });
 
-                        ui.label("Path");
-
-                        let text_edit_singleline_response: Response =
-                            ui.text_edit_singleline(&mut self.scene_path);
-                        if text_edit_singleline_response.gained_focus() {
-                            *has_focus = true;
-                            *redraw_gui = true;
+        ui.horizontal(|ui: &mut Ui| {
+            egui::ComboBox::from_label("Other Material")
+                .selected_text(format!("{:?}", self.other_material))
+                .show_ui(ui, |ui| {
+                    for material_type in ShaderType::iter() {
+                        let type_str: &'static str = material_type.into();
+                        if ui
+                            .selectable_value(
+                                &mut self.other_material,
+                                material_type,
+                                type_str,
+                            )
+                            .clicked()
+                        {
+                            commands
+                                .send(Command::SetOtherMaterial {
+                                    material: self.other_material,
+                                })
+                                .unwrap();
                         }
-                        if text_edit_singleline_response.lost_focus() {
-                            *has_focus = false;
-                        }
-                    });
-
-                    // This button opens a file dialog and
-                    // sets the scene_path to that path.
-                    ui.horizontal(|ui: &mut Ui| {
-                        if ui.button("Open file..").clicked() {
-                            if let Some(path) = rfd::FileDialog::new()
-                                .set_directory(env::current_dir().unwrap())
-                                .add_filter("WGSL Shaders (*.wgsl)", &["wgsl"])
-                                .pick_file()
-                            {
-                                self.scene_path = path.display().to_string();
-                            }
-                        }
-                    });
-
-                    ui.horizontal(|ui: &mut Ui| {
-                        ui.label("Camera constant");
-                        let camera_constant: Response = ui.add(
-                            egui::widgets::DragValue::new(&mut self.camera_constant)
-                                .clamp_range(0.1..=10.0)
-                                .fixed_decimals(1)
-                                .speed(0.1),
-                        );
-                        if camera_constant.changed() {
-                            commands.send(Command::SetCameraConstant { constant: self.camera_constant }).unwrap();
-                        }
-                    });
-
-                    ui.horizontal(|ui: &mut Ui| {
-                        egui::ComboBox::from_label("Sphere Material")
-                        .selected_text(format!("{:?}", self.sphere_material))
-                        .show_ui(ui, |ui| {
-                            for material_type in ShaderType::iter() {
-                                let type_str: &'static str = material_type.into();
-                                if ui.selectable_value(&mut self.sphere_material, material_type, type_str).clicked() {
-                                    commands.send(Command::SetSphereMaterial { material: self.sphere_material }).unwrap();
-                                }
-                            }
-                        });
-                    });
-
-                    ui.horizontal(|ui: &mut Ui| {
-                        egui::ComboBox::from_label("Other Material")
-                        .selected_text(format!("{:?}", self.other_material))
-                        .show_ui(ui, |ui| {
-                            for material_type in ShaderType::iter() {
-                                let type_str: &'static str = material_type.into();
-                                if ui.selectable_value(&mut self.other_material, material_type, type_str).clicked() {
-                                    commands.send(Command::SetOtherMaterial { material: self.other_material }).unwrap();
-                                }
-                            }
-                        });
-                    });
-
-
+                    }
                 });
             });
+    }
+
+    fn create_scene_selection_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>) {
+        ui.horizontal(|ui: &mut Ui| {
+            egui::ComboBox::from_label("Scene")
+                .selected_text(format!("{}", self.current_scene))
+                .show_ui(ui, |ui| {
+                    for scene in &self.scenes {
+                        if ui.selectable_value(
+                            &mut self.current_scene, 
+                            scene.name.clone(), 
+                            &scene.name).clicked() {
+                                commands.send(Command::LoadScene { scene: scene.clone() }).unwrap()
+                            }
+                    }
+                })
         });
     }
 }
