@@ -4,14 +4,13 @@ use crate::command::Command;
 
 use cgmath::{Vector3, Point3};
 
+#[derive(Clone, Debug)]
 pub struct Camera {
     pub eye: Point3<f32>,
     pub target: Point3<f32>,
     pub up: Vector3<f32>,
     pub aspect: f32,
     pub constant: f32,
-    pub znear: f32,
-    pub zfar: f32,
 }
 
 impl Default for Camera {
@@ -25,8 +24,6 @@ impl Default for Camera {
             up: cgmath::Vector3::unit_y(),
             constant: 1.0,
             aspect: 1.0,
-            znear: 0.1,
-            zfar: 100.0,
         }
     }
 }

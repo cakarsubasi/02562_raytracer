@@ -228,6 +228,7 @@ impl Mesh {
                     )
                     .vec4(),
                 );
+                // TODO: allow optional normals
                 normals.push(
                     vec3f32(
                         m.mesh.normals[i * 3],

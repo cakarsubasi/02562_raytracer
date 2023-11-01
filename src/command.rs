@@ -41,6 +41,26 @@ pub struct SceneDescriptor {
     pub res: (u32, u32),
 }
 
+impl SceneDescriptor {
+    pub fn default_scene() -> Self {
+        let basic_scene_camera = Camera {
+            eye: (2.0, 1.5, 2.0).into(),
+            target: (0.0, 0.5, 0.0).into(),
+            up: (0.0, 1.0, 0.0).into(), 
+            constant: 1.0,
+            ..Default::default()
+        };
+        Self {
+            name: String::from("Default"),
+            shader: PathBuf::from("res/shaders/shader.wgsl"),
+            model: Some(PathBuf::from("res/models/teapot.obj")),
+            camera: basic_scene_camera.clone(),
+            res: (512, 512),
+        }
+    }
+
+}
+
 pub fn get_scenes() -> Vec<SceneDescriptor> {
     let basic_scene_camera = Camera {
         eye: (2.0, 1.5, 2.0).into(),

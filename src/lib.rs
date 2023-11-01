@@ -9,7 +9,7 @@ mod tools;
 
 use std::{thread, time::Instant, path::Path};
 
-use crate::{control_panel::ControlPanel, render_state::RenderState};
+use crate::{control_panel::ControlPanel, render_state::RenderState, command::SceneDescriptor};
 
 /*
 Boilerplate code from https://sotrh.github.io/learn-wgpu/
@@ -277,7 +277,9 @@ pub async fn run() {
         WINDOW_PADDING,
     ));
 
-    let mut render_state = RenderState::new(&event_loop, render_state_window).await;
+    let default_scene = SceneDescriptor::default_scene();
+
+    let mut render_state = RenderState::new(&event_loop, render_state_window, default_scene).await;
 
     let (transmitter, receiver): (Sender<Command>, Receiver<Command>) = unbounded::<Command>();
     // Create the window selector which will be used for
@@ -364,6 +366,12 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                         }
                         Command::SetOtherMaterial { material } => {
                             render_state.uniform().update_other_selection(material as u32);
+                        }
+                        Command::LoadScene { scene } => {
+                            match render_state.load_scene(&scene) {
+                                Ok(_) => {}
+                                Err(err) => eprintln!("{err}"),
+                            }
                         }
                         
                         other => {
