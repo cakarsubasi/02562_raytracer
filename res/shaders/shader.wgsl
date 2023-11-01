@@ -1,7 +1,7 @@
 // Vertex shader
 
 const PI = 3.14159265359;
-const ETA = 0.000001;
+const ETA = 0.00001;
 
 const BACKGROUND_COLOR: vec3f = vec3f(0.0, 0.0, 0.5);
 
@@ -164,34 +164,31 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var hit = hit_record_init();
 
     var result = vec3f(0.0);
-    var result_textured = vec3f(1.0);
+    var textured = vec3f(0.0);
     // each loop is one bounce
-//    if (intersect_trimesh(&r, &hit)) {
-//        return vec4f(error_shader(), bgcolor.a);
+//    if (!intersect_min_max(&r)) {
+//        result = bgcolor.rgb;
 //    } else {
-//        return bgcolor;
-//    }
-    if (!intersect_min_max(&r)) {
-        result = bgcolor.rgb;
-    } else {
         for (var i = 0; i < max_depth; i++) {
-            if (intersect_scene_bsp(&r, &hit)) {
-                result += shade(&r, &hit);
+            if (intersect_scene(&r, &hit)) {
                 if (hit.use_texture) {
-                    result_textured = texture_sample(&hit);
+                    textured = shade(&r, &hit);
+                } else {
+                    result += shade(&r, &hit);
                 }
             } else {
                 result += bgcolor.rgb; break;
             }
 
             if (hit.has_hit) {
+                result += textured * texture_sample(&hit);
                 break;
             }
         }
-        result = result * result_textured;
-    }
+        
+//    }
     //return vec4f(result, bgcolor.a);
-    return vec4f(pow(result, vec3f(1.0/1.0)), bgcolor.a);
+    return vec4f(pow(result, vec3f(1.5/1.0)), bgcolor.a);
 }
 
 fn texture_sample(hit: ptr<function, HitRecord>) -> vec3f {
@@ -205,32 +202,44 @@ fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> 
     return has_hit;
 }
 
-fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
+fn intersect_scene_loop(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
     var has_hit = false;
     let num_of_tris = arrayLength(&indexBuffer);
     for (var i = 0u; i < num_of_tris; i++) {
         has_hit = has_hit || intersect_triangle_indexed(r, hit, i);
     }
+    return has_hit;
+}
 
-    //let arr = array<vec3f, 3>(vec3f(-0.2, 0.1, 0.9), vec3f(0.2, 0.1, 0.9), vec3f(-0.2, 0.1, -0.1));
-    //has_hit = has_hit || intersect_triangle(r, hit, arr);
-    //has_hit = has_hit || intersect_sphere(r, hit, arr[0], 0.05);
-    //has_hit = has_hit || intersect_sphere(r, hit, arr[1], 0.05);
-    //has_hit = has_hit || intersect_sphere(r, hit, arr[2], 0.05);
-//
+fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
+    var has_hit = false;
+    let arr = array<vec3f, 3>(vec3f(0.2, 0.1, 0.9), vec3f(-0.2, 0.1, -0.1), vec3f(-0.2, 0.1, 0.9));
+    has_hit = has_hit || intersect_triangle(r, hit, arr);
+    has_hit = has_hit || intersect_sphere(r, hit, arr[0], 0.05);
+    has_hit = has_hit || intersect_sphere(r, hit, arr[1], 0.05);
+    has_hit = has_hit || intersect_sphere(r, hit, arr[2], 0.05);
+
     //let arr2 = array<vec3f, 3>(vec3f(0.1, 0.1, 0.1), vec3f(0.1, 0.5, 0.1), vec3f(0.6, 0.5, 0.1));
     //has_hit = has_hit || intersect_triangle(r, hit, arr2);
     //has_hit = has_hit || intersect_sphere(r, hit, arr2[0], 0.05);
     //has_hit = has_hit || intersect_sphere(r, hit, arr2[1], 0.05);
     //has_hit = has_hit || intersect_sphere(r, hit, arr2[2], 0.05);
 
-    //has_hit = has_hit || intersect_plane(r, hit, vec3f(0.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0));
-    //has_hit = has_hit || intersect_sphere(r, hit, vec3f(0.0, 0.5, 0.0), 0.3);
+    has_hit = has_hit || intersect_plane(r, hit, plane_onb, vec3f(0.0, 0.0, 0.0));
+    has_hit = has_hit || intersect_sphere(r, hit, vec3f(0.0, 0.5, 0.0), 0.3);
     return has_hit;
 }
 
-fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, position: vec3f, normal: vec3f) -> bool {
+struct Onb {
+    tangent: vec3f,
+    binormal: vec3f,
+    normal: vec3f,
+};
+const plane_onb = Onb(vec3f(-1.0, 0.0, 0.0), vec3f(0.0, 0.0, 1.0), vec3f(0.0, 1.0, 0.0));
+
+fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, plane: Onb, position: vec3f) -> bool {
     let ray = *r;
+    let normal = plane_onb.normal;
     let distance = dot((position - ray.origin), normal)/(dot(ray.direction, normal));
     
     if (distance < ray.tmin || distance > ray.tmax) {
@@ -244,7 +253,10 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, positio
     (*hit).base_color = vec3f(0.1, 0.7, 0.0);
     (*hit).shader = SHADER_TYPE_LAMBERTIAN;
     (*hit).use_texture = true;
-    (*hit).uv0 = pos.xy;
+    let u = 0.1 * dot((pos - position), plane.tangent) % 1.0;
+    let v = 0.1 * dot((pos - position), plane.binormal) % 1.0;
+
+    (*hit).uv0 = vec2f(abs(u), abs(v));
     return true;
 }
 
@@ -259,30 +271,15 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     let normal = cross(e0, e1);
 
     let nom = cross(o_to_v0, w_i);
-    let denom = dot(w_i, normal);
-    if (abs(denom) < 1e-10) {
+    var denom = dot(w_i, normal);
+    if (abs(denom) < 1e-6) {
         return false;
     }
 
-    var eta = ETA;
-    if (denom > 0.0) {
-        eta = eta * -1.0;
-    }
-
-    let beta = dot(nom, e1) / denom;
-    if (beta < 0.0) {
-        return false;
-    }
-    let gamma = -dot(nom, e0) / denom;
-    if (gamma < 0.0) {
-        return false;
-    }
-    if (beta + gamma > 1.0) {
-        return false;
-    }
-
+    let beta = dot(nom, e1) / (denom);
+    let gamma = -dot(nom, e0) / (denom);
     let distance = dot(o_to_v0, normal) / denom;
-    if (distance > ray.tmax || distance < ray.tmin) {
+    if (beta < 0.0 || gamma < 0.0 || beta + gamma > 1.0 || distance > ray.tmax || distance < ray.tmin) {
         return false;
     }
 
@@ -292,6 +289,7 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     (*hit).position = pos;
     (*hit).normal = normalize(normal);
     (*hit).base_color = vec3f(0.4, 0.3, 0.2);
+    (*hit).use_texture = false;
     (*hit).shader = SHADER_TYPE_LAMBERTIAN;
     return true;
 }
@@ -329,15 +327,16 @@ fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center
     let normal = normalize(pos - center);
     (*hit).position = pos;
     (*hit).normal = normal;
+    (*hit).use_texture = false;
     (*hit).base_color = vec3f(0.0, 0.5, 0.0);
 
-    let shader_type = SHADER_TYPE_PHONG;
+    let shader_type = uniforms.selection1;
+    (*hit).specular = 0.1;
+    (*hit).shininess = 42.0;
     if (shader_type == SHADER_TYPE_TRANSMIT) {
         setup_shader_transmissive(r, hit, 1.4);
     } else if (shader_type == SHADER_TYPE_GLOSSY) {
         setup_shader_transmissive(r, hit, 1.4);
-        (*hit).specular = 0.2;
-        (*hit).shininess = 42.0;
     }
     (*hit).shader = shader_type;
     return true;
@@ -448,19 +447,21 @@ fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     let normal = hit_record.normal;
 
     let w_i = ray.direction;
-    let w_o = normalize(uniforms.camera_pos - hit_record.position);
+    let w_o = normalize(uniforms.camera_pos - hit_record.position); // view direction
+    let w_r = reflect(-w_i, normal);
 
     let light = sample_point_light(hit_record.position);
     let light_dir = light.w_i;
-    let refl_dir = reflect(-light_dir, normal);
+    let light_intensity = light.l_i;
+    let refl_dir = normalize(reflect(-light_dir, normal));
 
-    let w_r = reflect(-w_i, normal);
-    let refl = light.l_i * dot(ray.direction, hit_record.normal);
-    let fixed = specular * (s + 2.0) / (2.0 * PI) * pow(dot(w_o, w_r), 5.0);
-    //let phong_total = light.l_i * fixed * dot(-w_i, normal);
-    //let phong_coeff = o_m_s / PI + specular * (s + 2.0) / (2.0 * PI) * pow(dot(w_o, w_r), 100f);
-    let phong_total = vec3f(1.0) * pow(dot(w_o, refl_dir), 10.0);
-    return phong_total; // * vec3f(1.0);
+    let coeff = specular * (s + 2.0) / (2.0 * PI);
+    let phong_total = pow(saturate(dot(w_o, refl_dir)), s);
+    //let refl_loss = dot(light_dir, normal) * light_intensity;
+    //let coeff = o_m_s / PI + specular * (s + 2.0) / (2.0 * PI) * phong_total;
+    //let phong_total = refl_loss;
+
+    return coeff * phong_total * vec3f(1.0);
 }
 
 

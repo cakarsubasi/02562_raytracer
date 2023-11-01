@@ -3,7 +3,7 @@
 
 # 1. Texture mapping
 
-Not done
+Done with some issues.
 
 # 2. Stratified jitter sampling
 

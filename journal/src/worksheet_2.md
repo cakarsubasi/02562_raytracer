@@ -24,8 +24,8 @@ Done, need images, need tag
 
 ### 4. Phong reflection
 
-Not done
+Done, need images
 
 ### 5. Glossy shader
 
-Not done, WIP
+Done, need images
