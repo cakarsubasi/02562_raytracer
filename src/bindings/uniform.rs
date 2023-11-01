@@ -32,6 +32,10 @@ impl UniformGpu {
 
         Self { buffer, uniforms }
     }
+
+    pub fn update(&mut self, uniform: Uniform) {
+        self.uniforms = uniform;
+    }
 }
 
 impl Uniform {
@@ -103,7 +107,7 @@ impl Bindable for UniformGpu {
     aspect_ratio: f32,
     camera_up: vec3f,
     selection1: u32,
-    selectioni2: u32,
+    selection2: u32,
 };");
 
         let bind_type = "uniform";
