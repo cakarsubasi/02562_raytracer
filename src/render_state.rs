@@ -5,7 +5,7 @@ use crate::{
         mesh::MeshGpu,
         storage_mesh::{Mesh, StorageMeshGpu},
         texture::Texture,
-        uniform::{Uniform, UniformGpu},
+        uniform::UniformGpu,
         vertex::{self, Vertex},
         Bindable, IntoGpu, BufferOwner
     },
@@ -103,8 +103,8 @@ impl RenderState {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: size.width,
-            height: size.height,
+            width: scene.res.0,
+            height: scene.res.1,
             present_mode: wgpu::PresentMode::Fifo, //surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
@@ -413,7 +413,7 @@ impl RenderState {
         self.window.inner_size().width as f32 / self.window.inner_size().height as f32
     }
 
-    pub fn set_display_mode(&mut self, resolution: (u32, u32), display_mode: crate::command::DisplayMode) -> Result<()> {
+    pub fn set_display_mode(&mut self, resolution: (u32, u32), _display_mode: crate::command::DisplayMode) -> Result<()> {
         if resolution.0 > 0 && resolution.1 > 0 {
             self.config.width = resolution.0;
             self.config.height = resolution.1;

@@ -462,7 +462,7 @@ impl ControlPanel {
 
     fn create_pixel_subdivision_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>) {
         ui.horizontal(|ui| {
-            let slider = egui::Slider::new(&mut self.pixel_subdivision, 1..=7)
+            let slider = egui::Slider::new(&mut self.pixel_subdivision, 1..=crate::bindings::uniform::MAX_SUBDIVISION)
                 .text("Pixel Subdivision")
                 .clamp_to_range(true);
             if ui.add(slider).changed() {

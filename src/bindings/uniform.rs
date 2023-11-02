@@ -17,7 +17,7 @@ pub struct Uniform {
     _padding0: [u32; 2],
 }
 
-const MAX_SUBDIVISION: u32 = 7;
+pub const MAX_SUBDIVISION: u32 = 10;
 
 pub struct UniformGpu {
     pub uniforms: Uniform,
@@ -202,10 +202,11 @@ impl Bindable for UniformGpu {
 }
 
 fn compute_jitters(pixel_size: f64, subdivs: u32) -> Vec<[f32; 2]> {
-    assert!(subdivs <= MAX_SUBDIVISION);
+    assert!(subdivs <= MAX_SUBDIVISION && subdivs > 0 && pixel_size != 0.0);
     let mut jitter_vectors = vec![];
     use rand::prelude::*;
-    let mut rng = rand::thread_rng();
+    use rand_pcg::Lcg64Xsh32;
+    let mut rng = Lcg64Xsh32::new(0, 0);
     let step = pixel_size / subdivs as f64;
     if subdivs == 1 {
         jitter_vectors.push([0.0, 0.0]);
