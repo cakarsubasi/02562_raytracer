@@ -339,7 +339,7 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                     render_state.input_alt(&command);
                     match command {
                         Command::Resize { new_size } => {
-                            render_state.resize(new_size);
+                            //render_state.resize(new_size);
                         }
                         Command::KeyEvent {
                             key,
@@ -379,10 +379,18 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                                 .uniform()
                                 .update_other_selection(material as u32);
                         }
+                        Command::SetPixelSubdivision { level } => {
+                            render_state
+                                .uniform()
+                                .update_subdivision_level(level);
+                        }
+                        Command::SetResolution { resolution, display_mode } => {
+                            render_state.set_display_mode(resolution, display_mode).unwrap();
+                        }
                         Command::LoadScene { scene } => match render_state.load_scene(&scene) {
                             Ok(_) => {}
                             Err(err) => eprintln!("{err}"),
-                        },
+                        }
 
                         other => {
                             eprintln!("Detected and dropped command {other:?}");

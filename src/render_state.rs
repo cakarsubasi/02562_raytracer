@@ -420,4 +420,15 @@ impl RenderState {
         //self.config.width as f32 / self.config.height as f32
         self.window.inner_size().width as f32 / self.window.inner_size().height as f32
     }
+
+    pub fn set_display_mode(&mut self, resolution: (u32, u32), display_mode: crate::command::DisplayMode) -> Result<()> {
+        if resolution.0 > 0 && resolution.1 > 0 {
+            self.config.width = resolution.0;
+            self.config.height = resolution.1;
+            self.surface.configure(&self.device, &self.config);
+        }
+        // TODO: use display_mode to do funny things
+
+        Ok(())
+    }
 }

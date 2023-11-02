@@ -13,8 +13,11 @@ pub struct Uniform {
     camera_up: [f32; 3],
     selection1: u32,
     selection2: u32,
-    _padding0: [u32; 3],
+    subdivision_level: u32,
+    _padding0: [u32; 2],
 }
+
+const MAX_SUBDIVISION: u32 = 7; 
 
 pub struct UniformGpu {
     pub uniforms: Uniform,
@@ -49,7 +52,8 @@ impl Uniform {
             aspect_ratio: 1.0,
             selection1: 0,
             selection2: 0,
-            _padding0: [0, 0, 0],
+            subdivision_level: 1,
+            _padding0: [0, 0],
         }
     }
 
@@ -68,6 +72,15 @@ impl Uniform {
 
     pub fn update_other_selection(&mut self, selection: u32) {
         self.selection2 = selection;
+    }
+
+    pub fn update_subdivision_level(&mut self, level: u32) {
+        if level <= MAX_SUBDIVISION {
+            self.subdivision_level = level;
+        } else {
+            self.subdivision_level = MAX_SUBDIVISION;
+            eprintln!("Attempted raise subdivision level above maximum");
+        }
     }
 }
 
