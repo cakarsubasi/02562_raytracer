@@ -154,7 +154,7 @@ fn vs_main(
     return out;
 }
 
-fn get_camera_ray(uv: vec2f) -> Ray {
+fn get_camera_ray(uv: vec2f, sample: u32) -> Ray {
     let e = uniforms.camera_pos;
     let p = uniforms.camera_look_at;
     let u = uniforms.camera_up;
@@ -165,7 +165,9 @@ fn get_camera_ray(uv: vec2f) -> Ray {
     let b1 = normalize(cross(v, u));
     let b2 = cross(b1, v);
 
-    let q = normalize(b1 * uv.x * aspect + b2 * uv.y + v*d);
+    let j_x = jitter[sample].x;
+    let j_y = jitter[sample].y;
+    let q = normalize(b1 * (uv.x + j_x) * aspect + b2 * (uv.y + j_y) + v*d);
 
     let ray = ray_init(q, e);
     return ray;
@@ -178,15 +180,18 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let bgcolor = vec4f(0.1, 0.3, 0.6, 1.0);
     let max_depth = MAX_DEPTH;
     let uv = in.coords * 0.5;
-    var r = get_camera_ray(uv);
-    var hit = hit_record_init();
+    let subdiv = uniforms.subdivision_level;
+
 
     var result = vec3f(0.0);
     var textured = vec3f(0.0);
     // each loop is one bounce
-//    if (!intersect_min_max(&r)) {
-//        result = bgcolor.rgb;
-//    } else {
+    //if (!intersect_min_max(&r)) {
+    //    result = bgcolor.rgb;
+    //} else {
+    for (var sample = 0u; sample < subdiv * subdiv; sample++) {
+        var r = get_camera_ray(uv, sample);
+        var hit = hit_record_init();
         for (var i = 0; i < max_depth; i++) {
             if (intersect_scene(&r, &hit)) {
                 if (hit.shader.use_texture) {
@@ -203,9 +208,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                 break;
             }
         }
-        
-//    }
-    //return vec4f(result, bgcolor.a);
+    }
+    let multiplier = 1.0 / f32(subdiv * subdiv);
+    result = result * multiplier;
+    //}
     return vec4f(pow(result, vec3f(1.5/1.0)), bgcolor.a);
 }
 

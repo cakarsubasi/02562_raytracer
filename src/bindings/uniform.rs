@@ -175,6 +175,7 @@ impl Bindable for UniformGpu {
     camera_up: vec3f,
     selection1: u32,
     selection2: u32,
+    subdivision_level: u32,
 };",
         );
 
