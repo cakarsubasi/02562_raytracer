@@ -371,17 +371,17 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                         }
                         Command::SetSphereMaterial { material } => {
                             render_state
-                                .uniform()
+                                .uniform.uniforms
                                 .update_sphere_selection(material as u32);
                         }
                         Command::SetOtherMaterial { material } => {
                             render_state
-                                .uniform()
+                                .uniform.uniforms
                                 .update_other_selection(material as u32);
                         }
                         Command::SetPixelSubdivision { level } => {
                             render_state
-                                .uniform()
+                                .uniform.uniforms
                                 .update_subdivision_level(level);
                         }
                         Command::SetResolution { resolution, display_mode } => {

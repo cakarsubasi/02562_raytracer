@@ -28,8 +28,20 @@ impl Texture {
         img: &image::DynamicImage,
         label: Option<&str>,
     ) -> Result<Self> {
-        let rgba = img.to_rgba8();
-        let dimensions = img.dimensions();
+        
+        let (texture, view, sampler) = Self::build(device, queue, img, label);
+
+        Ok(Self {
+            texture,
+            view,
+            sampler,
+        })
+    }
+
+    fn build(device: &wgpu::Device, queue: &wgpu::Queue, image: &image::DynamicImage, label: Option<&str>)
+    -> (wgpu::Texture, wgpu::TextureView, wgpu::Sampler) {
+        let rgba = image.to_rgba8();
+        let dimensions = image.dimensions();
 
         let size = wgpu::Extent3d {
             width: dimensions.0,
@@ -74,11 +86,7 @@ impl Texture {
             ..Default::default()
         });
 
-        Ok(Self {
-            texture,
-            view,
-            sampler,
-        })
+        (texture, view, sampler)
     }
 }
 

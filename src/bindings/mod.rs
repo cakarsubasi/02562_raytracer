@@ -65,7 +65,7 @@ pub fn create_shader_definitions(vec_of_descriptors: &Vec<Vec<WgslBindDescriptor
     string
 }
 
-trait BufferOwner {
+pub trait BufferOwner {
     fn update_buffer(&self, queue: &wgpu::Queue);
 }
 

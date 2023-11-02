@@ -7,7 +7,7 @@ use crate::{
         texture::Texture,
         uniform::{Uniform, UniformGpu},
         vertex::{self, Vertex},
-        Bindable, IntoGpu,
+        Bindable, IntoGpu, BufferOwner
     },
     camera::{Camera, CameraController},
     command::Command,
@@ -37,7 +37,7 @@ pub struct RenderState {
     render_pipeline: wgpu::RenderPipeline,
     mesh_direct: MeshGpu,
     pub camera: Camera,
-    uniform: UniformGpu,
+    pub uniform: UniformGpu,
     texture: Texture,
     mesh_handle: Option<StorageMeshGpu>,
     bsp_tree_handle: Option<BspTreeGpu>,
@@ -213,8 +213,8 @@ impl RenderState {
         self.bsp_tree_handle = handles.6;
         // update uniforms
         self.camera = scene.camera.to_owned();
-        // update resolution TODO
-
+        // update resolution
+        self.set_display_mode(scene.res, crate::command::DisplayMode::Stretch)?;
         Ok(())
     }
 
@@ -335,10 +335,6 @@ impl RenderState {
         self.window().id()
     }
 
-    pub fn uniform(&mut self) -> &mut Uniform {
-        &mut self.uniform.uniforms
-    }
-
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.size = new_size;
@@ -357,12 +353,8 @@ impl RenderState {
     pub fn update(&mut self) {
         self.camera.aspect = self.aspect_ratio();
         self.camera_controller.update_camera(&mut self.camera);
-        self.uniform.uniforms.update_camera(&self.camera);
-        self.queue.write_buffer(
-            &self.uniform.buffer,
-            0,
-            bytemuck::cast_slice(&[self.uniform.uniforms]),
-        );
+        self.uniform.update(Some(&self.camera), None, None, Some(self.config.height));
+        self.uniform.update_buffer(&self.queue);
     }
 
     pub fn render(&self) -> Result<(), wgpu::SurfaceError> {
