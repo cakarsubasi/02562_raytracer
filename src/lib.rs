@@ -6,10 +6,11 @@ mod render_state;
 mod data_structures;
 mod bindings;
 mod tools;
+mod scenes;
 
 use std::{thread, time::Instant, path::Path};
 
-use crate::{control_panel::ControlPanel, render_state::RenderState, command::SceneDescriptor};
+use crate::{control_panel::ControlPanel, render_state::RenderState, scenes::SceneDescriptor};
 
 /*
 Boilerplate code from https://sotrh.github.io/learn-wgpu/

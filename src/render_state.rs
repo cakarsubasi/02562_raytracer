@@ -10,9 +10,10 @@ use crate::{
         Bindable, IntoGpu,
     },
     camera::{Camera, CameraController},
-    command::{Command, SceneDescriptor},
+    command::Command,
 };
-use wgpu::{self, BindGroup};
+use crate::SceneDescriptor;
+use wgpu;
 use winit::{
     event_loop::EventLoop,
     window::{Window, WindowId},
@@ -213,7 +214,7 @@ impl RenderState {
         // update uniforms
         self.camera = scene.camera.to_owned();
         // update resolution TODO
-        
+
         Ok(())
     }
 

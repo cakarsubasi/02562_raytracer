@@ -19,8 +19,8 @@ use winit::{
 };
 
 use crate::{
-    command::{Command, ShaderType, SceneDescriptor, get_scenes},
-    gpu_handles::GPUHandles,
+    command::{Command, ShaderType},
+    gpu_handles::GPUHandles, scenes::{SceneDescriptor, get_scenes},
 };
 
 pub struct ControlPanel {
