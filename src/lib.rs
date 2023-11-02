@@ -338,8 +338,8 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                 Ok(command) => {
                     render_state.input_alt(&command);
                     match command {
-                        Command::Resize { new_size } => {
-                            //render_state.resize(new_size);
+                        Command::Resize { new_size: _ } => {
+                            
                         }
                         Command::KeyEvent {
                             key,
@@ -383,6 +383,10 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                             render_state
                                 .uniform.uniforms
                                 .update_subdivision_level(level);
+                        }
+                        Command::SetTexture { use_texture, uv_scale } => {
+                            render_state.uniform.uniforms.update_use_texture(use_texture);
+                            render_state.uniform.uniforms.update_uv_scale(uv_scale);
                         }
                         Command::SetResolution { resolution, display_mode } => {
                             render_state.set_display_mode(resolution, display_mode).unwrap();

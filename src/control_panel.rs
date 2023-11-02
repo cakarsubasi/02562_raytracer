@@ -41,6 +41,7 @@ pub struct ControlPanel {
     sphere_material: ShaderType,
     other_material: ShaderType,
     use_texture: bool,
+    texture_uv_scale: (f32, f32),
     pixel_subdivision: u32,
     render_resolution: (u32, u32),
     display_mode: DisplayMode,
@@ -116,6 +117,7 @@ impl ControlPanel {
             scene_path: path,
             model_path: model,
             use_texture: true,
+            texture_uv_scale: (1.0, 1.0),
             pixel_subdivision: 1,
             render_resolution: (800, 450),
             display_mode: DisplayMode::Stretch,
@@ -449,14 +451,29 @@ impl ControlPanel {
 
     fn create_texture_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>) {
         ui.horizontal(|ui| {
-            if ui.checkbox(&mut self.use_texture, "Use Texture").changed() {
+            let uv_x: Response = ui.add(
+                egui::widgets::DragValue::new(&mut self.texture_uv_scale.0)
+                    .clamp_range(0.0..=1000.0)
+                    .fixed_decimals(1)
+                    .speed(0.1),
+            );
+            let uv_y: Response = ui.add(
+                egui::widgets::DragValue::new(&mut self.texture_uv_scale.1)
+                .clamp_range(0.0..=1000.0)
+                .fixed_decimals(1)
+                    .speed(0.1),
+            );
+            let use_texture_box = ui.checkbox(&mut self.use_texture, "Use Texture");
+
+            if use_texture_box.changed() || uv_x.changed() || uv_y.changed() {
                 commands
                     .send(Command::SetTexture {
                         use_texture: self.use_texture as u32,
-                        uv: (1.0, 1.0),
+                        uv_scale: self.texture_uv_scale,
                     })
                     .unwrap()
             };
+
         });
     }
 

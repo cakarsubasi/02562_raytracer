@@ -3,7 +3,7 @@ use crate::camera::Camera;
 
 use wgpu::util::DeviceExt;
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniform {
     camera_pos: [f32; 3],
@@ -14,7 +14,11 @@ pub struct Uniform {
     selection1: u32,
     selection2: u32,
     subdivision_level: u32,
-    _padding0: [u32; 2],
+    use_texture: u32,
+    _padding0: [u32; 1],
+    uv_scale: [f32; 2],
+    //_padding0: [u32; 3],
+    _padding1: [u32; 2],
 }
 
 pub const MAX_SUBDIVISION: u32 = 10;
@@ -84,7 +88,10 @@ impl Uniform {
             selection1: 0,
             selection2: 0,
             subdivision_level: 1,
-            _padding0: [0, 0],
+            use_texture: 0,
+            uv_scale: [1.0, 1.0],
+            _padding0: [0],
+            _padding1: [0, 0],
         }
     }
 
@@ -111,6 +118,14 @@ impl Uniform {
             self.subdivision_level = MAX_SUBDIVISION;
             eprintln!("Attempted raise subdivision level above maximum");
         }
+    }
+
+    pub fn update_use_texture(&mut self, use_texture: u32) {
+        self.use_texture = use_texture;
+    }
+
+    pub fn update_uv_scale(&mut self, uv_scale: (f32, f32)) {
+        self.uv_scale = uv_scale.into();
     }
 }
 
@@ -176,6 +191,9 @@ impl Bindable for UniformGpu {
     selection1: u32,
     selection2: u32,
     subdivision_level: u32,
+    use_texture: u32,
+    _padding0: u32,
+    uv_scale: vec2f,
 };",
         );
 
