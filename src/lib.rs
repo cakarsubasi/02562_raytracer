@@ -1,14 +1,14 @@
+mod bindings;
 mod camera;
 mod command;
 mod control_panel;
+mod data_structures;
 mod gpu_handles;
 mod render_state;
-mod data_structures;
-mod bindings;
-mod tools;
 mod scenes;
+mod tools;
 
-use std::{thread, time::Instant, path::Path};
+use std::{path::Path, thread, time::Instant};
 
 use crate::{control_panel::ControlPanel, render_state::RenderState, scenes::SceneDescriptor};
 
@@ -17,7 +17,7 @@ Boilerplate code from https://sotrh.github.io/learn-wgpu/
 */
 
 use command::Command;
-use crossbeam_channel::{unbounded, Receiver, Sender, RecvTimeoutError};
+use crossbeam_channel::{unbounded, Receiver, RecvTimeoutError, Sender};
 use gpu_handles::GPUHandles;
 use tools::RenderStats;
 #[cfg(target_arch = "wasm32")]
@@ -316,7 +316,9 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                         // Reconfigure the surface if lost
                         Err(wgpu::SurfaceError::Lost) => render_state.resize(render_state.size),
                         // The system is out of memory, we should probably quit
-                        Err(wgpu::SurfaceError::OutOfMemory) => {panic!("out of memory")},
+                        Err(wgpu::SurfaceError::OutOfMemory) => {
+                            panic!("out of memory")
+                        }
                         // All other errors (Outdated, Timeout) should be resolved by the next frame
                         Err(e) => eprintln!("{:?}", e),
                     }
@@ -348,6 +350,11 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                             }
                             _ => {}
                         },
+                        // Dont do anything on key release because we are lazy
+                        Command::KeyEvent {
+                            key: _,
+                            state: ElementState::Released,
+                        } => {}
                         Command::Shutdown { value } => {
                             if value {
                                 break;
@@ -363,18 +370,20 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                             render_state.camera.constant = constant;
                         }
                         Command::SetSphereMaterial { material } => {
-                            render_state.uniform().update_sphere_selection(material as u32);
+                            render_state
+                                .uniform()
+                                .update_sphere_selection(material as u32);
                         }
                         Command::SetOtherMaterial { material } => {
-                            render_state.uniform().update_other_selection(material as u32);
+                            render_state
+                                .uniform()
+                                .update_other_selection(material as u32);
                         }
-                        Command::LoadScene { scene } => {
-                            match render_state.load_scene(&scene) {
-                                Ok(_) => {}
-                                Err(err) => eprintln!("{err}"),
-                            }
-                        }
-                        
+                        Command::LoadScene { scene } => match render_state.load_scene(&scene) {
+                            Ok(_) => {}
+                            Err(err) => eprintln!("{err}"),
+                        },
+
                         other => {
                             eprintln!("Detected and dropped command {other:?}");
                         }
@@ -391,11 +400,13 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
 }
 
 fn load_shader(render_state: &mut RenderState, shader_path: &str) {
-    let shader_module = pollster::block_on(
-        render_state.create_shader_module_from_file(Path::new(shader_path)),
-    );
+    let shader_module =
+        pollster::block_on(render_state.create_shader_module_from_file(Path::new(shader_path)));
     match shader_module {
-        Ok(module) => render_state.recreate_render_pipeline(&module),
+        Ok(module) => {
+            render_state.recreate_render_pipeline(&module);
+            eprintln!("Successfully loaded shader.")
+        }
         Err(err) => {
             eprintln!("{err}")
         }
