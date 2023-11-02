@@ -19,8 +19,9 @@ use winit::{
 };
 
 use crate::{
-    command::{Command, ShaderType},
-    gpu_handles::GPUHandles, scenes::{SceneDescriptor, get_scenes},
+    command::{Command, DisplayMode, ShaderType},
+    gpu_handles::GPUHandles,
+    scenes::{get_scenes, SceneDescriptor},
 };
 
 pub struct ControlPanel {
@@ -40,6 +41,10 @@ pub struct ControlPanel {
     sphere_material: ShaderType,
     other_material: ShaderType,
     use_texture: bool,
+    pixel_subdivision: u32,
+    render_resolution: (u32, u32),
+    display_mode: DisplayMode,
+    max_samples: u32,
     scene_path: String,
     model_path: String,
 }
@@ -110,10 +115,14 @@ impl ControlPanel {
             other_material: ShaderType::Lambertian,
             scene_path: path,
             model_path: model,
-            use_texture: false,
+            use_texture: true,
+            pixel_subdivision: 1,
+            render_resolution: (800, 450),
+            display_mode: DisplayMode::Stretch,
+            max_samples: 4096,
             window_id,
             scenes: get_scenes(),
-            current_scene: "Default".into()
+            current_scene: "Default".into(),
         }
     }
 
@@ -247,25 +256,34 @@ impl ControlPanel {
                                 .unwrap()
                         };
                     });
+                    self.create_resolution_ui(ui, commands);
                     self.create_scene_selection_ui(ui, commands);
                     self.create_path_ui(ui, commands, has_focus, redraw_gui);
                     self.create_basic_scene_ui(ui, commands);
-                    
+                    self.create_texture_ui(ui, commands);
+                    self.create_pixel_subdivision_ui(ui, commands);
+                    self.create_max_sample_ui(ui, commands);
                 });
             });
         });
     }
 
-    fn create_path_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>, has_focus: &mut bool, redraw_gui: &mut bool) {
+    fn create_path_ui(
+        &mut self,
+        ui: &mut Ui,
+        commands: &Sender<Command>,
+        has_focus: &mut bool,
+        redraw_gui: &mut bool,
+    ) {
         // Load different shaders
         ui.horizontal(|ui: &mut Ui| {
-            let load_scene_button = ui.button("Load Shader");
+            let load_shader_button = ui.button("Load Shader");
 
-            if load_scene_button.changed() {
+            if load_shader_button.changed() {
                 *redraw_gui = true;
             };
 
-            if load_scene_button.clicked() {
+            if load_shader_button.clicked() {
                 commands
                     .send(Command::LoadShader {
                         shader_path: self.scene_path.clone(),
@@ -302,18 +320,19 @@ impl ControlPanel {
 
         // load different models
         ui.horizontal(|ui: &mut Ui| {
-            let load_scene_button = ui.button("Load Model");
+            let load_model_button = ui.button("Load Model");
 
-            if load_scene_button.changed() {
+            if load_model_button.changed() {
                 *redraw_gui = true;
             };
 
-            if load_scene_button.clicked() {
-                commands
-                    .send(Command::LoadShader {
-                        shader_path: self.scene_path.clone(),
-                    })
-                    .unwrap();
+            if load_model_button.clicked() {
+                eprintln!("Load model not implemented yet.");
+                //commands
+                //    .send(Command::LoadModel {
+                //        shader_path: self.scene_path.clone(),
+                //    })
+                //    .unwrap();
             }
 
             ui.label("Path");
@@ -330,22 +349,21 @@ impl ControlPanel {
         });
 
         // This button opens a file dialog and
-        // sets the scene_path to that path.
+        // sets the model_path to that path.
         ui.horizontal(|ui: &mut Ui| {
             if ui.button("Open file..").clicked() {
                 if let Some(path) = rfd::FileDialog::new()
                     .set_directory(env::current_dir().unwrap())
-                    .add_filter("WGSL Shaders (*.wgsl)", &["wgsl"])
+                    .add_filter("Wavefront OBJ (*.obj)", &["obj"])
                     .pick_file()
                 {
-                    self.scene_path = path.display().to_string();
+                    self.model_path = path.display().to_string();
                 }
             }
         });
     }
 
     fn create_basic_scene_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>) {
-
         ui.horizontal(|ui: &mut Ui| {
             ui.label("Camera constant");
             let camera_constant: Response = ui.add(
@@ -370,11 +388,7 @@ impl ControlPanel {
                     for material_type in ShaderType::iter() {
                         let type_str: &'static str = material_type.into();
                         if ui
-                            .selectable_value(
-                                &mut self.sphere_material,
-                                material_type,
-                                type_str,
-                            )
+                            .selectable_value(&mut self.sphere_material, material_type, type_str)
                             .clicked()
                         {
                             commands
@@ -394,11 +408,7 @@ impl ControlPanel {
                     for material_type in ShaderType::iter() {
                         let type_str: &'static str = material_type.into();
                         if ui
-                            .selectable_value(
-                                &mut self.other_material,
-                                material_type,
-                                type_str,
-                            )
+                            .selectable_value(&mut self.other_material, material_type, type_str)
                             .clicked()
                         {
                             commands
@@ -409,7 +419,7 @@ impl ControlPanel {
                         }
                     }
                 });
-            });
+        });
     }
 
     fn create_scene_selection_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>) {
@@ -418,14 +428,103 @@ impl ControlPanel {
                 .selected_text(format!("{}", self.current_scene))
                 .show_ui(ui, |ui| {
                     for scene in &self.scenes {
-                        if ui.selectable_value(
-                            &mut self.current_scene, 
-                            scene.name.clone(), 
-                            &scene.name).clicked() {
-                                commands.send(Command::LoadScene { scene: scene.clone() }).unwrap()
-                            }
+                        if ui
+                            .selectable_value(
+                                &mut self.current_scene,
+                                scene.name.clone(),
+                                &scene.name,
+                            )
+                            .clicked()
+                        {
+                            commands
+                                .send(Command::LoadScene {
+                                    scene: scene.clone(),
+                                })
+                                .unwrap()
+                        }
                     }
                 })
+        });
+    }
+
+    fn create_texture_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>) {
+        ui.horizontal(|ui| {
+            if ui.checkbox(&mut self.use_texture, "Use Texture").changed() {
+                commands
+                    .send(Command::SetTexture {
+                        use_texture: self.use_texture as u32,
+                        uv: (1.0, 1.0),
+                    })
+                    .unwrap()
+            };
+        });
+    }
+
+    fn create_pixel_subdivision_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>) {
+        ui.horizontal(|ui| {
+            let slider = egui::Slider::new(&mut self.pixel_subdivision, 1..=7)
+                .text("Pixel Subdivision")
+                .clamp_to_range(true);
+            if ui.add(slider).changed() {
+                commands
+                    .send(Command::SetPixelSubdivision {
+                        level: self.pixel_subdivision,
+                    })
+                    .unwrap();
+            }
+        });
+    }
+
+    fn create_resolution_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>) {
+        ui.horizontal(|ui: &mut Ui| {
+            ui.label("Resolution");
+            let resolution_x: Response = ui.add(
+                egui::widgets::DragValue::new(&mut self.render_resolution.0)
+                    .clamp_range(256..=2000)
+                    .speed(1),
+            );
+            let resolution_y: Response = ui.add(
+                egui::widgets::DragValue::new(&mut self.render_resolution.1)
+                    .clamp_range(256..=2000)
+                    .speed(1),
+            );
+            let display_mode_changed = egui::ComboBox::from_label("Mode")
+                .selected_text(format!("{:?}", self.display_mode))
+                .show_ui(ui, |ui| {  
+                    DisplayMode::iter().map(|display_mode| {
+                        let type_str: &'static str = display_mode.into();
+                        ui.selectable_value(&mut self.display_mode, display_mode, type_str).changed()
+                }).fold(false, |acc, elem| acc || elem)
+            }).inner.unwrap_or(false);
+
+            if resolution_x.changed() || resolution_y.changed() || display_mode_changed {
+                commands
+                    .send(Command::SetResolution {
+                        resolution: self.render_resolution,
+                        display_mode: self.display_mode,
+                    })
+                    .unwrap();
+            }
+        });
+    }
+
+    fn create_max_sample_ui(&mut self, ui: &mut Ui, commands: &Sender<Command>) {
+        ui.horizontal(|ui: &mut Ui| {
+            ui.label("Max Samples");
+            let samples = ui.add(
+                egui::widgets::DragValue::new(&mut self.max_samples)
+                    .clamp_range(1..=4096)
+                    .fixed_decimals(1)
+                    .speed(1),
+            );
+
+            if samples.changed() {
+                commands
+                .send(Command::SetSamples {
+                    samples: self.max_samples
+                })
+                .unwrap();
+            }
         });
     }
 }
