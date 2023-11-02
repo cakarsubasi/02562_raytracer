@@ -21,8 +21,8 @@ const MAX_DEPTH: i32 = 10;
 //@group(0) @binding(1)
 //var<uniform> selection: u32;
 // Stratified jitter sampling array TODO
-@group(0) @binding(2)
-var<storage> jitter: array<vec2f>;
+//@group(0) @binding(2)
+//var<storage> jitter: array<vec2f>;
 
 //@group(1) @binding(0)
 //var sampler0: sampler;
