@@ -10,9 +10,7 @@ pub mod vertex;
 pub trait Bindable {
     fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry>;
     fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry>;
-    fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
-        Vec::new()
-    }
+    fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor>;
 }
 
 // TODO: squish layouts

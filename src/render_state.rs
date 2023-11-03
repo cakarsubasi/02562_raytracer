@@ -115,9 +115,7 @@ impl RenderState {
 
         let mesh_direct = MeshGpu::new(&device, vertex::VERTICES, vertex::INDICES);
 
-        let model_path = &scene.model;
-        let shader_path = &scene.shader;
-        let handles = Self::setup_rendering(&device, &queue, &config, model_path.as_deref(), shader_path.as_path()).await.unwrap();
+        let handles = Self::setup_rendering(&device, &queue, &config, &scene).await.unwrap();
 
         Self {
             window,
@@ -143,8 +141,7 @@ impl RenderState {
         device: &wgpu::Device, 
         queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
-        model_path: Option<&Path>,
-        shader_path: &Path
+        scene: &SceneDescriptor,
     ) -> Result<(wgpu::PipelineLayout, wgpu::RenderPipeline, Vec<wgpu::BindGroup>, UniformGpu, Texture, Option<StorageMeshGpu>, Option<BspTreeGpu>)> {
         // Uniform variables
         let uniform = UniformGpu::new(&device);
@@ -152,8 +149,13 @@ impl RenderState {
         let texture_bytes = include_bytes!("../res/textures/grass.jpg");
         let texture = Texture::from_bytes(&device, &queue, texture_bytes, "grass.jpg").unwrap();
         // load model
-        let model = model_path.and_then(|m| Mesh::from_obj(m).ok());
-        let mesh_handle = model.as_ref().and_then(|m| Some(m.into_gpu(&device)));
+        let model = &scene.model.as_ref().and_then(|m| Mesh::from_obj(m).ok());
+        let mesh_handle = model.as_ref().and_then(|m|
+            match scene.vertex_type {
+                crate::scenes::VertexType::Split => Some(m.into_gpu_split(&device)),
+                crate::scenes::VertexType::Combined => Some(m.into_gpu_combined(&device)),
+            }
+        );
         // create and load the BSP
         let bsp_tree = model.as_ref().and_then(|m| Some(m.bsp_tree()));
         let bsp_tree_handle = bsp_tree.and_then(|b| Some(b.into_gpu(&device)));
@@ -185,7 +187,7 @@ impl RenderState {
         if let Some(b) = &bsp_tree_handle { shader_defs.push(b.get_bind_descriptor()) }
         let mut shader_defs = create_shader_definitions(&shader_defs);
 
-        let mut file = File::open(shader_path)?;
+        let mut file = File::open(&scene.shader)?;
         let mut shader_source = String::new();
         file.read_to_string(&mut shader_source)?;
 
@@ -203,7 +205,7 @@ impl RenderState {
     }
 
     pub fn load_scene(&mut self, scene: &SceneDescriptor) -> Result<()> {
-        let handles = pollster::block_on(Self::setup_rendering(&self.device, &self.queue, &self.config, scene.model.as_deref(), &scene.shader))?;
+        let handles = pollster::block_on(Self::setup_rendering(&self.device, &self.queue, &self.config, scene))?;
         self.render_pipeline_layout = handles.0;
         self.render_pipeline = handles.1;
         self.bind_groups = handles.2;

@@ -2,33 +2,21 @@ use std::{path::PathBuf, sync::Arc};
 
 use crate::camera::Camera;
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Copy, Clone)]
+pub enum VertexType {
+    #[default]
+    Split,
+    Combined,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct SceneDescriptor {
     pub name: String,
     pub shader: PathBuf,
+    pub vertex_type: VertexType,
     pub model: Option<PathBuf>,
     pub camera: Camera,
     pub res: (u32, u32),
-}
-
-impl SceneDescriptor {
-    pub fn default_scene() -> Self {
-        let basic_scene_camera = Camera {
-            eye: (2.0, 1.5, 2.0).into(),
-            target: (0.0, 0.5, 0.0).into(),
-            up: (0.0, 1.0, 0.0).into(), 
-            constant: 1.0,
-            ..Default::default()
-        };
-        Self {
-            name: String::from("Default"),
-            shader: PathBuf::from("res/shaders/shader.wgsl"),
-            model: Some(PathBuf::from("res/models/teapot.obj")),
-            camera: basic_scene_camera.clone(),
-            res: (512, 512),
-        }
-    }
-
 }
 
 pub fn get_scenes() -> Arc<[SceneDescriptor]> {
@@ -76,20 +64,22 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             model: Some(teapot_path.clone()),
             camera: utah_teapot_camera.clone(),
             res: (512, 512),
+            ..Default::default()
         },
-        SceneDescriptor {
-            name: String::from("Worksheet 1"),
-            shader: PathBuf::from("res/shaders/worksheet1.wgsl"),
-            model: None,
-            camera: basic_scene_camera.clone(),
-            res: (512, 512),
-        },
+        //SceneDescriptor {
+        //    name: String::from("Worksheet 1"),
+        //    shader: PathBuf::from("res/shaders/worksheet1.wgsl"),
+        //    model: None,
+        //    camera: basic_scene_camera.clone(),
+        //    res: (512, 512),
+        //},
         SceneDescriptor {
             name: String::from("Worksheet 2"),
             shader: PathBuf::from("res/shaders/worksheet2.wgsl"),
             model: None,
             camera: basic_scene_camera.clone(),
             res: (512, 512),
+            ..Default::default()
         },
         SceneDescriptor {
             name: String::from("Worksheet 3"),
@@ -97,6 +87,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             model: None,
             camera: basic_scene_camera.clone(),
             res: (512, 512),
+            ..Default::default()
         },
         SceneDescriptor {
             name: String::from("W5 Teapot"),
@@ -104,6 +95,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             model: Some(teapot_path.clone()),
             camera: utah_teapot_camera.clone(),
             res: (800, 450),
+            ..Default::default()
         },
         SceneDescriptor {
             name: String::from("W5 Cornell Box"),
@@ -111,34 +103,35 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             model: Some(cornell_box_path.clone()),
             camera: cornell_box_camera.clone(),
             res: (512, 512),
+            ..Default::default()
         },
-        SceneDescriptor {
-            name: String::from("W6 Bunny"),
-            shader: PathBuf::from("res/shaders/w06_bunny.wgsl"),
-            model: Some(bunny_path.clone()),
-            camera: bunny_camera.clone(),
-            res: (512, 512),
-        },
-        SceneDescriptor {
-            name: String::from("W6 Cornell Box"),
-            shader: PathBuf::from("res/shaders/w06_cornell_box.wgsl"),
-            model: Some(cornell_box_path.clone()),
-            camera: cornell_box_camera.clone(),
-            res: (512, 512),
-        },
-        SceneDescriptor {
-            name: String::from("W7 Progressive Illum"),
-            shader: PathBuf::from("res/shaders/w07_cornell_box.wgsl"),
-            model: Some(cornell_box_with_blocks_path.clone()),
-            camera: cornell_box_camera.clone(),
-            res: (512, 512),
-        },
-        SceneDescriptor {
-            name: String::from("W8 Fresnel"),
-            shader: PathBuf::from("res/shaders/w08_1.wgsl"),
-            model: Some(cornell_box_with_blocks_path.clone()),
-            camera: cornell_box_camera.clone(),
-            res: (512, 512),
-        },  
+        //SceneDescriptor {
+        //    name: String::from("W6 Bunny"),
+        //    shader: PathBuf::from("res/shaders/w06_bunny.wgsl"),
+        //    model: Some(bunny_path.clone()),
+        //    camera: bunny_camera.clone(),
+        //    res: (512, 512),
+        //},
+        //SceneDescriptor {
+        //    name: String::from("W6 Cornell Box"),
+        //    shader: PathBuf::from("res/shaders/w06_cornell_box.wgsl"),
+        //    model: Some(cornell_box_path.clone()),
+        //    camera: cornell_box_camera.clone(),
+        //    res: (512, 512),
+        //},
+        //SceneDescriptor {
+        //    name: String::from("W7 Progressive Illum"),
+        //    shader: PathBuf::from("res/shaders/w07_cornell_box.wgsl"),
+        //    model: Some(cornell_box_with_blocks_path.clone()),
+        //    camera: cornell_box_camera.clone(),
+        //    res: (512, 512),
+        //},
+        //SceneDescriptor {
+        //    name: String::from("W8 Fresnel"),
+        //    shader: PathBuf::from("res/shaders/w08_1.wgsl"),
+        //    model: Some(cornell_box_with_blocks_path.clone()),
+        //    camera: cornell_box_camera.clone(),
+        //    res: (512, 512),
+        //},  
     ])
 }
