@@ -21,13 +21,15 @@ use winit::{
 
 use anyhow::*;
 
-use std::{fs::File, path::Path};
+use std::fs::File;
 use std::io::prelude::*;
 
 const CAMERA_SPEED: f32 = 0.05;
 
 pub struct RenderState {
     surface: wgpu::Surface,
+    render_source: wgpu::Texture,
+    render_destination: wgpu::Texture,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
@@ -117,9 +119,13 @@ impl RenderState {
 
         let handles = Self::setup_rendering(&device, &queue, &config, &scene).await.unwrap();
 
+        let (render_source, render_destination) = Self::create_ping_pong_textures(&device, scene.res);
+
         Self {
             window,
             surface,
+            render_source,
+            render_destination,
             device,
             queue,
             config,
@@ -135,6 +141,35 @@ impl RenderState {
             bsp_tree_handle: handles.6,
             camera_controller,
         }
+    }
+
+    fn create_ping_pong_textures(device: &wgpu::Device, size: (u32, u32)) -> (wgpu::Texture, wgpu::Texture) {
+        let size = wgpu::Extent3d {
+            width: size.0,
+            height: size.1,
+            depth_or_array_layers: 1,
+        };
+        let texture_source = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Ping Pong Source"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let texture_destination = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Ping Pong Destination"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        (texture_source, texture_destination)
     }
 
     async fn setup_rendering(
@@ -303,6 +338,10 @@ impl RenderState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
+                }), Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba32Float,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             primitive: wgpu::PrimitiveState {
@@ -372,6 +411,9 @@ impl RenderState {
                 label: Some("Render Encoder"),
             });
 
+        let source_view = self.render_source.create_view(&wgpu::TextureViewDescriptor::default());
+        let destination_view = self.render_destination.create_view(&wgpu::TextureViewDescriptor::default());
+
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -386,6 +428,13 @@ impl RenderState {
                     }),
                     store: true,
                 },
+            }), Some(wgpu::RenderPassColorAttachment {
+                view: &source_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: true,
+                }
             })],
             depth_stencil_attachment: None,
         });
@@ -403,6 +452,21 @@ impl RenderState {
         render_pass.draw_indexed(0..self.mesh_direct.num_indices, 0, 0..1);
 
         drop(render_pass);
+
+        encoder.copy_texture_to_texture(
+            wgpu::ImageCopyTexture {
+                texture: &self.render_source,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyTexture {
+                texture: &self.render_destination,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            self.render_source.size());
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
