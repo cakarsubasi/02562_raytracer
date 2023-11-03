@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use crate::camera::Camera;
 
@@ -31,7 +31,7 @@ impl SceneDescriptor {
 
 }
 
-pub fn get_scenes() -> Vec<SceneDescriptor> {
+pub fn get_scenes() -> Arc<[SceneDescriptor]> {
     let basic_scene_camera = Camera {
         eye: (2.0, 1.5, 2.0).into(),
         target: (0.0, 0.5, 0.0).into(),
@@ -69,7 +69,14 @@ pub fn get_scenes() -> Vec<SceneDescriptor> {
     let bunny_path = PathBuf::from("res/models/bunny.obj");
     let teapot_path = PathBuf::from("res/models/teapot.obj");
 
-    vec![
+    Arc::new([
+        SceneDescriptor {
+            name: String::from("Default"),
+            shader: PathBuf::from("res/shaders/shader.wgsl"),
+            model: Some(teapot_path.clone()),
+            camera: utah_teapot_camera.clone(),
+            res: (512, 512),
+        },
         SceneDescriptor {
             name: String::from("Worksheet 1"),
             shader: PathBuf::from("res/shaders/worksheet1.wgsl"),
@@ -132,7 +139,6 @@ pub fn get_scenes() -> Vec<SceneDescriptor> {
             model: Some(cornell_box_with_blocks_path.clone()),
             camera: cornell_box_camera.clone(),
             res: (512, 512),
-        },
-        
-    ]
+        },  
+    ])
 }

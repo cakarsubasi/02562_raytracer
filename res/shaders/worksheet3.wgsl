@@ -1,3 +1,5 @@
+// Vertex shader
+
 const PI = 3.14159265359;
 const ETA = 0.00001;
 
@@ -15,17 +17,6 @@ const SHADER_TYPE_NO_RENDER: u32 = 255u;
 const SHADER_TYPE_DEFAULT: u32 = 0u;
 
 const MAX_DEPTH: i32 = 10;
-
-// Stratified jitter sampling array
-//var<storage> jitter: array<vec2f>;
-
-//var sampler0: sampler;
-//var texture0: texture_2d<f32>;
-
-// GPU will always align to 16, so this does not waste space
-//var<storage> vertexBuffer: array<vec4f>;
-//// GPU will always align to 16, so this does not waste space
-//var<storage> indexBuffer: array<vec4u>;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -176,6 +167,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var result = vec3f(0.0);
     var textured = vec3f(0.0);
+    // each loop is one bounce
     for (var sample = 0u; sample < subdiv * subdiv; sample++) {
         var r = get_camera_ray(uv, sample);
         var hit = hit_record_init();
@@ -198,12 +190,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
     let multiplier = 1.0 / f32(subdiv * subdiv);
     result = result * multiplier;
+
     return vec4f(pow(result, vec3f(1.5/1.0)), bgcolor.a);
 }
 
 fn texture_sample(hit: ptr<function, HitRecord>) -> vec3f {
     // Note that we are ignoring the potential alpha channel within the texture here
-    return textureSample(texture0, sampler0, (*hit).uv0).xyz;
+    var uv0_scaled = fract((*hit).uv0 * uniforms.uv_scale);
+
+    return textureSample(texture0, sampler0, uv0_scaled).xyz;
 }
 
 fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
@@ -226,7 +221,12 @@ fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool
     
     shader.base_color = vec3f(0.1, 0.7, 0.0);
     shader.shader = uniforms.selection2;
-    shader.use_texture = true;
+    if (uniforms.use_texture == 1u) {
+        shader.use_texture = true;
+    } else {
+        shader.use_texture = false;
+    }
+
     has_hit = has_hit || wrap_shader(intersect_plane(r, hit, plane_onb, vec3f(0.0, 0.0, 0.0)), hit, shader);
     
     return has_hit;
@@ -262,8 +262,8 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, plane: 
     (*hit).position = pos;
     (*hit).normal = normal;
 
-    let u = 0.1 * dot((pos - position), plane.tangent) % 1.0;
-    let v = 0.2 * dot((pos - position), plane.binormal) % 1.0;
+    let u = dot((pos - position), plane.tangent) % 1.0;
+    let v = dot((pos - position), plane.binormal) % 1.0;
 
     (*hit).uv0 = vec2f(abs(u), abs(v));
     return true;

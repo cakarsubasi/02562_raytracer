@@ -1,14 +1,12 @@
 use winit::{dpi::PhysicalSize, event::{VirtualKeyCode, ElementState}};
 use strum_macros::{EnumIter, IntoStaticStr};
 
-use crate::scenes::SceneDescriptor;
-
 #[derive(Debug)]
 pub enum Command {
     Resize { new_size: PhysicalSize<u32> },
     Render { value: bool },
     LoadShader { shader_path: String },
-    LoadScene { scene: SceneDescriptor },
+    LoadScene { idx: usize },
     SetCameraConstant { constant: f32 },
     SetSphereMaterial { material: ShaderType },
     SetOtherMaterial { material: ShaderType },

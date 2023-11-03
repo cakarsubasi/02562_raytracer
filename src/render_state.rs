@@ -48,7 +48,7 @@ pub struct RenderState {
 impl RenderState {
     pub async fn new(_event_loop: &EventLoop<()>, 
                     window: winit::window::Window,
-                    scene: SceneDescriptor) -> Self {
+                    scene: &SceneDescriptor) -> Self {
         //let window = WindowBuilder::new().build(&event_loop).unwrap();
         let size = window.inner_size();
 
@@ -111,12 +111,12 @@ impl RenderState {
         };
         surface.configure(&device, &config);
 
-        let camera = Default::default();
+        let camera = scene.camera.to_owned();
 
         let mesh_direct = MeshGpu::new(&device, vertex::VERTICES, vertex::INDICES);
 
-        let model_path = scene.model;
-        let shader_path = scene.shader;
+        let model_path = &scene.model;
+        let shader_path = &scene.shader;
         let handles = Self::setup_rendering(&device, &queue, &config, model_path.as_deref(), shader_path.as_path()).await.unwrap();
 
         Self {

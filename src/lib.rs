@@ -8,9 +8,9 @@ mod render_state;
 mod scenes;
 mod tools;
 
-use std::{path::Path, thread, time::Instant};
+use std::{path::Path, thread, time::Instant, sync::Arc};
 
-use crate::{control_panel::ControlPanel, render_state::RenderState, scenes::SceneDescriptor};
+use crate::{control_panel::ControlPanel, render_state::RenderState, scenes::{SceneDescriptor, get_scenes}};
 
 /*
 Boilerplate code from https://sotrh.github.io/learn-wgpu/
@@ -256,12 +256,15 @@ pub async fn run() {
     }
     let gpu_handles = GPUHandles::new();
 
+    let scenes = get_scenes();
+
     // Create control panel
     let control_panel: ControlPanel = ControlPanel::build(
         &gpu_handles,
         &event_loop,
         CONTROL_WINDOW_SIZE,
         WINDOW_PADDING,
+        scenes.clone()
     );
 
     let render_state_window = winit::window::WindowBuilder::new()
@@ -278,9 +281,7 @@ pub async fn run() {
         WINDOW_PADDING,
     ));
 
-    let default_scene = SceneDescriptor::default_scene();
-
-    let mut render_state = RenderState::new(&event_loop, render_state_window, default_scene).await;
+    let mut render_state = RenderState::new(&event_loop, render_state_window, &scenes[0]).await;
 
     let (transmitter, receiver): (Sender<Command>, Receiver<Command>) = unbounded::<Command>();
     // Create the window selector which will be used for
@@ -290,7 +291,7 @@ pub async fn run() {
 
     let _render_thread = thread::Builder::new()
         .name("Render Thread".into())
-        .spawn(move || rendering_thread(&mut render_state, receiver));
+        .spawn(move || rendering_thread(&mut render_state, receiver, scenes.clone()));
 
     main_thread(
         gpu_handles,
@@ -301,7 +302,7 @@ pub async fn run() {
     );
 }
 
-fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>) {
+fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>, scenes: Arc<[SceneDescriptor]>) {
     let mut command_count = 0;
     let max_commands = 500;
     let mut should_render = true;
@@ -391,7 +392,7 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>)
                         Command::SetResolution { resolution, display_mode } => {
                             render_state.set_display_mode(resolution, display_mode).unwrap();
                         }
-                        Command::LoadScene { scene } => match render_state.load_scene(&scene) {
+                        Command::LoadScene { idx } => match render_state.load_scene(&scenes[idx]) {
                             Ok(_) => {}
                             Err(err) => eprintln!("{err}"),
                         }

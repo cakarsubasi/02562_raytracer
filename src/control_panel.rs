@@ -1,6 +1,6 @@
 // Heavily based on: https://github.com/hasenbanck/egui_example/blob/master/src/main.rs
 
-use std::{env, iter, time::Instant};
+use std::{env, iter, time::Instant, sync::Arc};
 
 use strum::IntoEnumIterator;
 
@@ -21,7 +21,7 @@ use winit::{
 use crate::{
     command::{Command, DisplayMode, ShaderType},
     gpu_handles::GPUHandles,
-    scenes::{get_scenes, SceneDescriptor},
+    scenes::SceneDescriptor,
 };
 
 pub struct ControlPanel {
@@ -33,7 +33,7 @@ pub struct ControlPanel {
     config: wgpu::SurfaceConfiguration,
     render_pass: RenderPass,
     // Scenes
-    scenes: Vec<SceneDescriptor>,
+    scenes: Arc<[SceneDescriptor]>,
     current_scene: String,
     // All of our buttons' state
     should_render: bool,
@@ -56,6 +56,7 @@ impl ControlPanel {
         event_loop: &EventLoop<()>,
         window_size: winit::dpi::PhysicalSize<u32>,
         window_padding: u32,
+        scenes: Arc<[SceneDescriptor]>
     ) -> Self {
         let window: Window = winit::window::WindowBuilder::new()
             .with_decorations(true)
@@ -111,7 +112,7 @@ impl ControlPanel {
             render_pass,
             platform,
             should_render: true,
-            camera_constant: 1.0,
+            camera_constant: scenes[0].camera.constant,
             sphere_material: ShaderType::Lambertian,
             other_material: ShaderType::Lambertian,
             scene_path: path,
@@ -119,12 +120,12 @@ impl ControlPanel {
             use_texture: true,
             texture_uv_scale: (1.0, 1.0),
             pixel_subdivision: 1,
-            render_resolution: (800, 450),
+            render_resolution: scenes[0].res,
             display_mode: DisplayMode::Stretch,
             max_samples: 4096,
             window_id,
-            scenes: get_scenes(),
-            current_scene: "Default".into(),
+            current_scene: scenes[0].name.clone(),
+            scenes,
         }
     }
 
@@ -429,7 +430,7 @@ impl ControlPanel {
             egui::ComboBox::from_label("Scene")
                 .selected_text(format!("{}", self.current_scene))
                 .show_ui(ui, |ui| {
-                    for scene in &self.scenes {
+                    for (idx, scene) in self.scenes.iter().enumerate() {
                         if ui
                             .selectable_value(
                                 &mut self.current_scene,
@@ -440,7 +441,7 @@ impl ControlPanel {
                         {
                             commands
                                 .send(Command::LoadScene {
-                                    scene: scene.clone(),
+                                    idx
                                 })
                                 .unwrap()
                         }
