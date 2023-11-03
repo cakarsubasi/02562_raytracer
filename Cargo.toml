@@ -20,7 +20,6 @@ log = "0.4"
 wgpu = "0.17"
 cgmath = "0.18"
 bytemuck = { version = "1.12", features = [ "derive" ] }
-# notify = "6.1.1"
 egui = "0.22"
 egui_winit_platform = "0.19.0"
 egui_wgpu_backend = "0.25.0"
