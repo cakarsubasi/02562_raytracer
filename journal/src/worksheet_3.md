@@ -3,12 +3,12 @@
 
 # 1. Texture mapping
 
-Done with some issues.
+Done
 
 # 2. Stratified jitter sampling
 
-Not done
+Done
 
 ## 2.b. pixel subdivision levels
 
-Not done
+Done
