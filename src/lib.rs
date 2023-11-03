@@ -26,7 +26,7 @@ use wasm_bindgen::prelude::*;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
-    window::WindowId,
+    window::WindowId, dpi::PhysicalSize,
 };
 
 // Simple wrapper to handle different window ids.
@@ -212,6 +212,13 @@ fn main_thread(
     });
 }
 
+// Our render and control window sizes, and space between them.
+const RENDER_WINDOW_SIZE: winit::dpi::PhysicalSize<u32> =
+    winit::dpi::PhysicalSize::new(1420, 1080);
+const CONTROL_WINDOW_SIZE: winit::dpi::PhysicalSize<u32> =
+    winit::dpi::PhysicalSize::new(400, 1080);
+const WINDOW_PADDING: u32 = 16;
+
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
     cfg_if::cfg_if! {
@@ -228,13 +235,6 @@ pub async fn run() {
     }
 
     let event_loop = EventLoop::new();
-
-    // Our render and control window sizes, and space between them.
-    const RENDER_WINDOW_SIZE: winit::dpi::PhysicalSize<u32> =
-        winit::dpi::PhysicalSize::new(1420, 1080);
-    const CONTROL_WINDOW_SIZE: winit::dpi::PhysicalSize<u32> =
-        winit::dpi::PhysicalSize::new(400, 1080);
-    const WINDOW_PADDING: u32 = 16;
 
     #[cfg(target_arch = "wasm32")]
     {
@@ -391,6 +391,32 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>,
                         }
                         Command::SetResolution { resolution, display_mode } => {
                             render_state.set_display_mode(resolution, display_mode).unwrap();
+                            let size = match display_mode {
+                                command::DisplayMode::Exact => {
+                                    PhysicalSize::new(resolution.0, resolution.1)
+                                },
+                                command::DisplayMode::Stretch => {
+                                    RENDER_WINDOW_SIZE
+                                },
+                                command::DisplayMode::FitAuto => {
+                                    let max_aspect_ratio = RENDER_WINDOW_SIZE.width as f32 / RENDER_WINDOW_SIZE.height as f32;
+                                    let current_aspect_ratio = resolution.0 as f32 / resolution.1 as f32;
+                                    let (width, height) = if current_aspect_ratio > max_aspect_ratio {
+                                        // wider, fix the size horizontally
+                                        let width = RENDER_WINDOW_SIZE.width;
+                                        let height = (width as f32 / current_aspect_ratio) as u32;
+                                        (width, height)
+                                    } else {
+                                        // taller, fix the size vertically
+                                        let height = RENDER_WINDOW_SIZE.height;
+                                        let width = (height as f32 * current_aspect_ratio) as u32;
+                                        (width, height)
+                                    };
+                                    PhysicalSize::new(width, height)
+                                },
+                            };
+                            render_state.window().set_inner_size(size);
+                            
                         }
                         Command::LoadScene { idx } => match render_state.load_scene(&scenes[idx]) {
                             Ok(_) => {}

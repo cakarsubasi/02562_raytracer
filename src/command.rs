@@ -24,12 +24,8 @@ pub enum DisplayMode {
     Exact,
     /// rendering resolution is independent from window size
     Stretch,
-    /// Window can be adjusted vertically, horizontal size is automatically set
-    /// based on rendering resolution
-    FitVerticalAuto,
-    /// Window can be adjusted arbitrarily, renderer has to keep the required
-    // aspect ratio by filling in black bars
-    PillarBox,
+    /// Window is automatically adjusted to fit either the horizontal or vertical maximum
+    FitAuto,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, EnumIter, IntoStaticStr)]
