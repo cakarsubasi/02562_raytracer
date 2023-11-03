@@ -1,4 +1,4 @@
-use std::ops::{Add, Index, IndexMut, Mul, Sub};
+use std::ops::{Add, Index, IndexMut, Mul, Sub, Div};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Default, bytemuck::Zeroable)]
@@ -12,9 +12,14 @@ unsafe impl<T> bytemuck::Pod for Vec3<T> where T: bytemuck::Pod {}
 unsafe impl<T> bytemuck::Pod for Vec4<T> where T: bytemuck::Pod {}
 
 pub type Vec3f32 = Vec3<f32>;
+#[allow(dead_code)]
 pub type Vec3u32 = Vec3<u32>;
 pub type Vec4f32 = Vec4<f32>;
 pub type Vec4u32 = Vec4<u32>;
+#[allow(dead_code)]
+pub type Point3<T> = Vec3<T>;
+#[allow(dead_code)]
+pub type Point4<T> = Vec4<T>;
 
 #[inline(always)]
 pub const fn vec3f32(f0: f32, f1: f32, f2: f32) -> Vec3<f32> {
@@ -34,11 +39,39 @@ pub const fn vec3u32(u0: u32, u1: u32, u2: u32) -> Vec3<u32> {
 ///
 
 impl<T> Vec3<T>
-where
-    T: Default + Copy,
+where T: Default
 {
-    pub fn vec4(&self) -> Vec4<T> {
+    pub fn vec4(self) -> Vec4<T> {
         Vec4::<T>(self.0, self.1, self.2, Default::default())
+    }
+}
+
+pub trait Sqrt {
+    type Output;
+    fn sqrt(self) -> Self::Output;
+}
+
+impl Sqrt for f32 {
+
+    fn sqrt(self) -> Self::Output {
+        self.sqrt()
+    }
+
+    type Output = f32;
+}
+
+impl<T> Vec3<T>
+where T: Copy + Sqrt<Output = T> + Mul<Output = T> + Add<Output = T> + Div<Output = T>,
+Vec3<T>: Div<Output = Vec3<T>> {
+    #[allow(dead_code)]
+    pub fn magnitude(self) -> T {
+        T::sqrt(self.0 * self.0 + self.1 * self.1 + self.2 * self.2)
+    }
+
+    #[allow(dead_code)]
+    pub fn normalize(self) -> Self {
+        let magnitude = self.magnitude();
+        Self(self.0 / magnitude, self.1 / magnitude, self.2 / magnitude)
     }
 }
 
@@ -83,6 +116,17 @@ where
 
     fn mul(self, rhs: T) -> Self::Output {
         Self(self.0 * rhs, self.1 * rhs, self.2 * rhs)
+    }
+}
+
+impl<T> Div<T> for Vec3<T>
+where
+    T: Div<Output = T> + Copy,
+{
+    type Output = Self;
+
+    fn div(self, rhs: T) -> Self::Output {
+        Self(self.0 / rhs, self.1 / rhs, self.2 / rhs)
     }
 }
 
