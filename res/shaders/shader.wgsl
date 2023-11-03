@@ -45,6 +45,11 @@ struct VertexOutput {
     @location(0) coords: vec2<f32>,
 };
 
+struct FragmentOutput {
+    @location(0) frame: vec4f,
+    @location(1) accum: vec4f,
+}
+
 struct Ray {
     direction: vec3f,
     origin: vec3f,
@@ -176,7 +181,7 @@ fn get_camera_ray(uv: vec2f, sample: u32) -> Ray {
 // Fragment shader
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main(in: VertexOutput) -> FragmentOutput {
     let bgcolor = vec4f(0.1, 0.3, 0.6, 1.0);
     let max_depth = MAX_DEPTH;
     let uv = in.coords * 0.5;
@@ -212,8 +217,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
     let multiplier = 1.0 / f32(subdiv * subdiv);
     result = result * multiplier;
-    
-    return vec4f(pow(result, vec3f(1.5/1.0)), bgcolor.a);
+    let output = FragmentOutput(
+        vec4f(pow(result, vec3f(1.5/1.0)), bgcolor.a),
+        vec4f(0.0),
+    );
+    return output;
 }
 
 fn texture_sample(hit: ptr<function, HitRecord>) -> vec3f {

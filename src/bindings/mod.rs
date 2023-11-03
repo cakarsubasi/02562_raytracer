@@ -13,53 +13,55 @@ pub trait Bindable {
     fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor>;
 }
 
-// TODO: squish layouts
 pub fn create_bind_group_layouts(
     device: &wgpu::Device,
-    layout_entries: &Vec<Vec<wgpu::BindGroupLayoutEntry>>,
-) -> Vec<wgpu::BindGroupLayout> {
-    let mut layouts = Vec::with_capacity(layout_entries.len());
-    for entries in layout_entries {
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: entries.as_ref(),
-            label: None, // Some("uniform_bind_group_layout"),
-        });
-        layouts.push(layout);
-    }
-    layouts
+    layout_entries: &mut Vec<Vec<wgpu::BindGroupLayoutEntry>>,
+) -> wgpu::BindGroupLayout {
+    let huge_flattened_layout_entry = layout_entries.iter_mut()
+        .flat_map(|item| item)
+        .enumerate()
+        .map(|(idx, item)| { let mut item = *item;
+            item.binding = idx as u32;
+            item
+        }).collect::<Vec<_>>();
+    
+
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        entries: huge_flattened_layout_entry.as_slice(),
+        label: None
+    })
 }
 
-// TODO: squish bind groups
-pub fn create_bind_groups<'a, 'b>(
+pub fn create_bind_groups(
     device: &wgpu::Device,
-    bind_group_entries: &Vec<Vec<wgpu::BindGroupEntry>>,
-    bind_group_layouts: &Vec<wgpu::BindGroupLayout>,
-) -> Vec<wgpu::BindGroup> {
-    let mut bind_groups = Vec::new();
+    bind_group_entries: &mut Vec<wgpu::BindGroupEntry>,
+    bind_group_layout: &wgpu::BindGroupLayout,
+) -> wgpu::BindGroup {
+    bind_group_entries.iter_mut()
+    .enumerate()
+    .for_each(|(idx, item)| {
+        item.binding = idx as u32;
+    });
 
-    for (entries, layout) in bind_group_entries.iter().zip(bind_group_layouts) {
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &layout,
-            entries: entries,
-            label: None, // Some("uniform_bind_group"),
-        });
-        bind_groups.push(bind_group);
-    }
-    bind_groups
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &bind_group_layout,
+        entries: &bind_group_entries,
+        label: None, // Some("uniform_bind_group"),
+    })
 }
-
-// TODO: shader definitions need to match up to the previous two
 pub fn create_shader_definitions(vec_of_descriptors: &Vec<Vec<WgslBindDescriptor>>) -> String {
     let mut string = String::new();
-    for (group_id, descriptors) in vec_of_descriptors.iter().enumerate() {
-        for (binding_id, descriptor) in descriptors.iter().enumerate() {
+    vec_of_descriptors
+        .iter()
+        .flat_map(|v| v)
+        .enumerate()
+        .for_each(|(idx, descriptor)| {
             string.push_str(&generate_wgsl_string(
-                group_id as u32,
-                binding_id as u32,
+                0,
+                idx as u32,
                 descriptor,
             ));
-        }
-    }
+        });
     string
 }
 
@@ -92,6 +94,8 @@ fn generate_wgsl_string(
     binding_id: u32, // auto pick
     bind_descriptor: &WgslBindDescriptor,
 ) -> String {
+    assert!(group_id < 4);
+
     let WgslBindDescriptor {
         struct_def, // user provided or macro
         bind_type,  // user provided

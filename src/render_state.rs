@@ -1,18 +1,19 @@
+use crate::SceneDescriptor;
+use crate::bindings::texture::RenderSource;
 use crate::{
     bindings::{
         bsp_tree::BspTreeGpu,
         create_bind_group_layouts, create_bind_groups, create_shader_definitions,
         mesh::MeshGpu,
         storage_mesh::{Mesh, StorageMeshGpu},
-        texture::Texture,
+        texture::{RenderDestination, Texture},
         uniform::UniformGpu,
         vertex::{self, Vertex},
-        Bindable, IntoGpu, BufferOwner
+        Bindable, BufferOwner, IntoGpu,
     },
     camera::{Camera, CameraController},
     command::Command,
 };
-use crate::SceneDescriptor;
 use wgpu;
 use winit::{
     event_loop::EventLoop,
@@ -28,8 +29,8 @@ const CAMERA_SPEED: f32 = 0.05;
 
 pub struct RenderState {
     surface: wgpu::Surface,
-    render_source: wgpu::Texture,
-    render_destination: wgpu::Texture,
+    render_source: RenderSource,
+    render_destination: RenderDestination,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
@@ -48,9 +49,11 @@ pub struct RenderState {
 }
 
 impl RenderState {
-    pub async fn new(_event_loop: &EventLoop<()>, 
-                    window: winit::window::Window,
-                    scene: &SceneDescriptor) -> Self {
+    pub async fn new(
+        _event_loop: &EventLoop<()>,
+        window: winit::window::Window,
+        scene: &SceneDescriptor,
+    ) -> Self {
         //let window = WindowBuilder::new().build(&event_loop).unwrap();
         let size = window.inner_size();
 
@@ -117,9 +120,13 @@ impl RenderState {
 
         let mesh_direct = MeshGpu::new(&device, vertex::VERTICES, vertex::INDICES);
 
-        let handles = Self::setup_rendering(&device, &queue, &config, &scene).await.unwrap();
+        let render_source = RenderSource::new(&device, scene.res);
+        let render_destination = RenderDestination::new(&device, scene.res);
 
-        let (render_source, render_destination) = Self::create_ping_pong_textures(&device, scene.res);
+        let additional = vec![&render_destination as &dyn Bindable];
+        let handles = Self::setup_rendering(&device, &queue, &config, &scene, Some(&additional))
+            .await
+            .unwrap();
 
         Self {
             window,
@@ -143,41 +150,23 @@ impl RenderState {
         }
     }
 
-    fn create_ping_pong_textures(device: &wgpu::Device, size: (u32, u32)) -> (wgpu::Texture, wgpu::Texture) {
-        let size = wgpu::Extent3d {
-            width: size.0,
-            height: size.1,
-            depth_or_array_layers: 1,
-        };
-        let texture_source = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Ping Pong Source"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let texture_destination = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Ping Pong Destination"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        (texture_source, texture_destination)
-    }
+    
 
     async fn setup_rendering(
-        device: &wgpu::Device, 
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
         scene: &SceneDescriptor,
-    ) -> Result<(wgpu::PipelineLayout, wgpu::RenderPipeline, Vec<wgpu::BindGroup>, UniformGpu, Texture, Option<StorageMeshGpu>, Option<BspTreeGpu>)> {
+        additional: Option<&Vec<&dyn Bindable>>,
+    ) -> Result<(
+        wgpu::PipelineLayout,
+        wgpu::RenderPipeline,
+        Vec<wgpu::BindGroup>,
+        UniformGpu,
+        Texture,
+        Option<StorageMeshGpu>,
+        Option<BspTreeGpu>,
+    )> {
         // Uniform variables
         let uniform = UniformGpu::new(&device);
         // load texture
@@ -185,12 +174,10 @@ impl RenderState {
         let texture = Texture::from_bytes(&device, &queue, texture_bytes, "grass.jpg").unwrap();
         // load model
         let model = &scene.model.as_ref().and_then(|m| Mesh::from_obj(m).ok());
-        let mesh_handle = model.as_ref().and_then(|m|
-            match scene.vertex_type {
-                crate::scenes::VertexType::Split => Some(m.into_gpu_split(&device)),
-                crate::scenes::VertexType::Combined => Some(m.into_gpu_combined(&device)),
-            }
-        );
+        let mesh_handle = model.as_ref().and_then(|m| match scene.vertex_type {
+            crate::scenes::VertexType::Split => Some(m.into_gpu_split(&device)),
+            crate::scenes::VertexType::Combined => Some(m.into_gpu_combined(&device)),
+        });
         // create and load the BSP
         let bsp_tree = model.as_ref().and_then(|m| Some(m.bsp_tree()));
         let bsp_tree_handle = bsp_tree.and_then(|b| Some(b.into_gpu(&device)));
@@ -199,48 +186,108 @@ impl RenderState {
         let mut layout_entries = Vec::new();
         layout_entries.push(uniform.get_layout_entries());
         layout_entries.push(texture.get_layout_entries());
-        if let Some(m) = &mesh_handle { layout_entries.push(m.get_layout_entries()) }
-        if let Some(b) = &bsp_tree_handle { layout_entries.push(b.get_layout_entries()) }
+        if let Some(m) = &mesh_handle {
+            layout_entries.push(m.get_layout_entries())
+        }
+        if let Some(b) = &bsp_tree_handle {
+            layout_entries.push(b.get_layout_entries())
+        }
+        if let Some(additional) = &additional {
+            additional
+                .iter()
+                .for_each(|&item| layout_entries.push(item.get_layout_entries()))
+        }
 
-        let bind_group_layouts = create_bind_group_layouts(&device, &layout_entries);
+        let bind_group_layouts = create_bind_group_layouts(&device, &mut layout_entries);
 
         let mut bind_group_entries = Vec::new();
         bind_group_entries.push(uniform.get_bind_group_entries());
         bind_group_entries.push(texture.get_bind_group_entries());
-        if let Some(m) = &mesh_handle { bind_group_entries.push(m.get_bind_group_entries()) }
-        if let Some(b) = &bsp_tree_handle { bind_group_entries.push(b.get_bind_group_entries()) }
+        if let Some(m) = &mesh_handle {
+            bind_group_entries.push(m.get_bind_group_entries())
+        }
+        if let Some(b) = &bsp_tree_handle {
+            bind_group_entries.push(b.get_bind_group_entries())
+        }
+        if let Some(additional) = &additional {
+            additional
+                .iter()
+                .for_each(|&item| bind_group_entries.push(item.get_bind_group_entries()))
+        }
+        let mut bind_group_entries2 = bind_group_entries.into_iter().flatten().collect::<Vec<_>>();
 
-        let bind_groups = create_bind_groups(&device, &bind_group_entries, &bind_group_layouts);
+        let bind_groups =
+            create_bind_groups(&device, &mut bind_group_entries2, &bind_group_layouts);
 
         // create the render pipeline layout from bind group layouts
-        let render_pipeline_layout = Self::create_render_pipeline_layout(device, &bind_group_layouts);
+        let render_pipeline_layout =
+            Self::create_render_pipeline_layout(device, &vec![bind_group_layouts]);
 
-        let mut shader_defs = Vec::new();
-        shader_defs.push(uniform.get_bind_descriptor());
-        shader_defs.push(texture.get_bind_descriptor());
-        if let Some(m) = &mesh_handle { shader_defs.push(m.get_bind_descriptor()) }
-        if let Some(b) = &bsp_tree_handle { shader_defs.push(b.get_bind_descriptor()) }
-        let mut shader_defs = create_shader_definitions(&shader_defs);
+        let mut shader_defs = Self::create_shader_defs(
+            &uniform,
+            &texture,
+            &mesh_handle,
+            &bsp_tree_handle,
+            additional,
+        );
 
         let mut file = File::open(&scene.shader)?;
         let mut shader_source = String::new();
         file.read_to_string(&mut shader_source)?;
 
-        let shader = Self::create_shader_module(
-            &device,
-            &mut shader_defs,
-            &shader_source,
-        )
-        .await?;
+        let shader = Self::create_shader_module(&device, &mut shader_defs, &shader_source).await?;
 
-        let render_pipeline =
-            RenderState::create_render_pipeline(&device, Some(&render_pipeline_layout), &shader, &config);
-        
-        Ok((render_pipeline_layout, render_pipeline, bind_groups, uniform, texture, mesh_handle, bsp_tree_handle))
+        let render_pipeline = RenderState::create_render_pipeline(
+            &device,
+            Some(&render_pipeline_layout),
+            &shader,
+            &config,
+        );
+
+        Ok((
+            render_pipeline_layout,
+            render_pipeline,
+            vec![bind_groups],
+            uniform,
+            texture,
+            mesh_handle,
+            bsp_tree_handle,
+        ))
+    }
+
+    fn create_shader_defs(
+        uniform: &UniformGpu,
+        texture: &Texture,
+        mesh_handle: &Option<StorageMeshGpu>,
+        bsp_tree_handle: &Option<BspTreeGpu>,
+        additional: Option<&Vec<&dyn Bindable>>,
+    ) -> String {
+        let mut shader_defs = Vec::new();
+        shader_defs.push(uniform.get_bind_descriptor());
+        shader_defs.push(texture.get_bind_descriptor());
+        if let Some(m) = &mesh_handle {
+            shader_defs.push(m.get_bind_descriptor())
+        }
+        if let Some(b) = &bsp_tree_handle {
+            shader_defs.push(b.get_bind_descriptor())
+        }
+        if let Some(additional) = &additional {
+            additional
+                .iter()
+                .for_each(|&item| shader_defs.push(item.get_bind_descriptor()))
+        }
+        create_shader_definitions(&shader_defs)
     }
 
     pub fn load_scene(&mut self, scene: &SceneDescriptor) -> Result<()> {
-        let handles = pollster::block_on(Self::setup_rendering(&self.device, &self.queue, &self.config, scene))?;
+        let additional = vec![&self.render_destination as &dyn Bindable];
+        let handles = pollster::block_on(Self::setup_rendering(
+            &self.device,
+            &self.queue,
+            &self.config,
+            scene,
+            Some(&additional),
+        ))?;
         self.render_pipeline_layout = handles.0;
         self.render_pipeline = handles.1;
         self.bind_groups = handles.2;
@@ -271,12 +318,13 @@ impl RenderState {
         let mut file = File::open(shader_location)?;
         let mut shader_source = String::new();
         file.read_to_string(&mut shader_source)?;
-        let mut shader_defs = Vec::new();
-        shader_defs.push(self.uniform.get_bind_descriptor());
-        shader_defs.push(self.texture.get_bind_descriptor());
-        if let Some(m) = &self.mesh_handle { shader_defs.push(m.get_bind_descriptor()) }
-        if let Some(b) = &self.bsp_tree_handle { shader_defs.push(b.get_bind_descriptor()) }
-        let shader_defs = create_shader_definitions(&shader_defs);
+        let shader_defs = Self::create_shader_defs(
+            &self.uniform,
+            &self.texture,
+            &self.mesh_handle,
+            &self.bsp_tree_handle,
+            Some(&vec![&self.render_destination as &dyn Bindable]),
+        );
         Self::create_shader_module(&self.device, shader_defs.as_str(), &mut shader_source).await
     }
 
@@ -301,19 +349,19 @@ impl RenderState {
     }
 
     fn create_render_pipeline_layout(
-        device: &wgpu::Device, 
-        bind_group_layouts: &Vec<wgpu::BindGroupLayout>
+        device: &wgpu::Device,
+        bind_group_layouts: &Vec<wgpu::BindGroupLayout>,
     ) -> wgpu::PipelineLayout {
         let render_pipeline_layout =
-        device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Render Pipeline Layout"),
-            bind_group_layouts: bind_group_layouts
-                .iter()
-                .map(|v| v)
-                .collect::<Vec<_>>()
-                .as_ref(),
-            push_constant_ranges: &[],
-        });
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: bind_group_layouts
+                    .iter()
+                    .map(|v| v)
+                    .collect::<Vec<_>>()
+                    .as_ref(),
+                push_constant_ranges: &[],
+            });
         render_pipeline_layout
     }
 
@@ -334,15 +382,18 @@ impl RenderState {
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                }), Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba32Float,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+                targets: &[
+                    Some(wgpu::ColorTargetState {
+                        format: config.format,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                    Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba32Float,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                ],
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -394,7 +445,12 @@ impl RenderState {
     pub fn update(&mut self) {
         self.camera.aspect = self.aspect_ratio();
         self.camera_controller.update_camera(&mut self.camera);
-        self.uniform.update(Some(&self.camera), None, None, Some((self.config.width, self.config.height)));
+        self.uniform.update(
+            Some(&self.camera),
+            None,
+            None,
+            Some((self.config.width, self.config.height)),
+        );
         self.uniform.update_buffer(&self.queue);
     }
 
@@ -411,31 +467,31 @@ impl RenderState {
                 label: Some("Render Encoder"),
             });
 
-        let source_view = self.render_source.create_view(&wgpu::TextureViewDescriptor::default());
-        let destination_view = self.render_destination.create_view(&wgpu::TextureViewDescriptor::default());
-
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: 1.0,
-                    }),
-                    store: true,
-                },
-            }), Some(wgpu::RenderPassColorAttachment {
-                view: &source_view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: true,
-                }
-            })],
+            color_attachments: &[
+                Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 1.0,
+                        }),
+                        store: true,
+                    },
+                }),
+                Some(wgpu::RenderPassColorAttachment {
+                    view: &self.render_source.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: true,
+                    },
+                }),
+            ],
             depth_stencil_attachment: None,
         });
 
@@ -455,18 +511,19 @@ impl RenderState {
 
         encoder.copy_texture_to_texture(
             wgpu::ImageCopyTexture {
-                texture: &self.render_source,
+                texture: &self.render_source.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
             wgpu::ImageCopyTexture {
-                texture: &self.render_destination,
+                texture: &self.render_destination.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            self.render_source.size());
+            self.render_source.texture.size(),
+        );
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
@@ -479,11 +536,18 @@ impl RenderState {
         self.window.inner_size().width as f32 / self.window.inner_size().height as f32
     }
 
-    pub fn set_display_mode(&mut self, resolution: (u32, u32), _display_mode: crate::command::DisplayMode) -> Result<()> {
+    pub fn set_display_mode(
+        &mut self,
+        resolution: (u32, u32),
+        _display_mode: crate::command::DisplayMode,
+    ) -> Result<()> {
         if resolution.0 > 0 && resolution.1 > 0 {
             self.config.width = resolution.0;
             self.config.height = resolution.1;
             self.surface.configure(&self.device, &self.config);
+            self.render_destination.change_dimension(&self.device, (self.config.width, self.config.height));
+            self.render_source.change_dimension(&self.device, (self.config.width, self.config.height));
+            
         }
         // TODO: use display_mode to do funny things
 

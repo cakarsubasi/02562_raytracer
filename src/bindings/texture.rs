@@ -28,7 +28,6 @@ impl Texture {
         img: &image::DynamicImage,
         label: Option<&str>,
     ) -> Result<Self> {
-        
         let (texture, view, sampler) = Self::build(device, queue, img, label);
 
         Ok(Self {
@@ -38,8 +37,12 @@ impl Texture {
         })
     }
 
-    fn build(device: &wgpu::Device, queue: &wgpu::Queue, image: &image::DynamicImage, label: Option<&str>)
-    -> (wgpu::Texture, wgpu::TextureView, wgpu::Sampler) {
+    fn build(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        image: &image::DynamicImage,
+        label: Option<&str>,
+    ) -> (wgpu::Texture, wgpu::TextureView, wgpu::Sampler) {
         let rgba = image.to_rgba8();
         let dimensions = image.dimensions();
 
@@ -143,7 +146,124 @@ impl Bindable for Texture {
                 var_name: "texture0",
                 var_type: "texture_2d<f32>",
                 extra_code: None,
-            }
+            },
         ]
+    }
+}
+
+pub struct RenderDestination {
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+}
+
+impl RenderDestination {
+    pub fn new(device: &wgpu::Device, size: (u32, u32)) -> Self {
+        let (texture, view) = Self::build(device, size);
+    
+        Self {
+            texture,
+            view
+        }
+    }
+
+    pub fn change_dimension(&mut self, device: &wgpu::Device, new_size: (u32, u32)) {
+        let (texture, view) = Self::build(device, new_size);
+        self.texture = texture;
+        self.view = view;
+    }
+
+    fn build(device: &wgpu::Device, size: (u32, u32)) -> (wgpu::Texture, wgpu::TextureView) {
+        let extent = wgpu::Extent3d {
+            width: size.0,
+            height: size.1,
+            depth_or_array_layers: 1,
+        };
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Ping Pong Destination"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba32Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        return (texture, view)
+    }
+}
+
+impl Bindable for RenderDestination {
+    fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
+        vec![wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                multisampled: false,
+                view_dimension: wgpu::TextureViewDimension::D2,
+                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+            },
+            count: None,
+        }]
+    }
+
+    fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
+        vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::TextureView(&self.view),
+        }]
+    }
+
+    fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
+        vec![WgslBindDescriptor {
+            struct_def: None,
+            bind_type: None,
+            var_name: "renderTexture",
+            var_type: "texture_2d<f32>",
+            extra_code: None,
+        }]
+    }
+}
+
+pub struct RenderSource {
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+}
+
+impl RenderSource {
+    pub fn new(device: &wgpu::Device, size: (u32, u32)) -> RenderSource {
+        let (texture, view) = Self::build(device, size);
+
+        Self {
+            texture,
+            view,
+        }
+    }
+
+    fn build(device: &wgpu::Device, size: (u32, u32)) -> (wgpu::Texture, wgpu::TextureView) {
+        let extent = wgpu::Extent3d {
+            width: size.0,
+            height: size.1,
+            depth_or_array_layers: 1,
+        };
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Ping Pong Source"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        return (texture, view)
+    }
+
+
+    pub fn change_dimension(&mut self, device: &wgpu::Device, new_size: (u32, u32)) {
+        let (texture, view) = Self::build(device, new_size);
+        self.texture = texture;
+        self.view = view;
     }
 }
