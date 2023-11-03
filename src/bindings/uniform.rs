@@ -18,14 +18,13 @@ pub struct Uniform {
     _padding0: [u32; 1],
     uv_scale: [f32; 2],
     //_padding0: [u32; 3],
-    _padding1: [u32; 2],
+    canvas_resolution: [u32; 2],
 }
 
 pub const MAX_SUBDIVISION: u32 = 10;
 
 pub struct UniformGpu {
     pub uniforms: Uniform,
-    canvas_height: u32,
     buffer: wgpu::Buffer,
     jitter_buffer: wgpu::Buffer,
 }
@@ -51,7 +50,6 @@ impl UniformGpu {
             buffer,
             jitter_buffer,
             uniforms,
-            canvas_height: 512,
         }
     }
 
@@ -60,7 +58,7 @@ impl UniformGpu {
         camera: Option<&Camera>,
         selection1: Option<u32>,
         selection2: Option<u32>,
-        canvas_height: Option<u32>,
+        canvas_resolution: Option<(u32, u32)>,
     ) {
         if let Some(camera) = camera {
             self.uniforms.update_camera(camera);
@@ -71,8 +69,8 @@ impl UniformGpu {
         if let Some(selection2) = selection2 {
             self.uniforms.update_other_selection(selection2);
         };
-        if let Some(canvas_height) = canvas_height {
-            self.canvas_height = canvas_height;
+        if let Some(canvas_resolution) = canvas_resolution {
+            self.uniforms.update_resolution(canvas_resolution);
         };
     }
 }
@@ -91,7 +89,7 @@ impl Uniform {
             use_texture: 0,
             uv_scale: [1.0, 1.0],
             _padding0: [0],
-            _padding1: [0, 0],
+            canvas_resolution: [512, 512],
         }
     }
 
@@ -127,13 +125,17 @@ impl Uniform {
     pub fn update_uv_scale(&mut self, uv_scale: (f32, f32)) {
         self.uv_scale = uv_scale.into();
     }
+
+    pub fn update_resolution(&mut self, resolution: (u32, u32)) {
+        self.canvas_resolution = resolution.into()
+    }
 }
 
 impl BufferOwner for UniformGpu {
     fn update_buffer(&self, queue: &wgpu::Queue) {
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniforms]));
         let jitter_vec = compute_jitters(
-            1.0 / self.canvas_height as f64,
+            1.0 / self.uniforms.canvas_resolution[1] as f64,
             self.uniforms.subdivision_level,
         );
         queue.write_buffer(
@@ -194,6 +196,7 @@ impl Bindable for UniformGpu {
     use_texture: u32,
     _padding0: u32,
     uv_scale: vec2f,
+    resolution: vec2f,
 };",
         );
 

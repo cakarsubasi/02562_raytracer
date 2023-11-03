@@ -355,7 +355,7 @@ impl RenderState {
     pub fn update(&mut self) {
         self.camera.aspect = self.aspect_ratio();
         self.camera_controller.update_camera(&mut self.camera);
-        self.uniform.update(Some(&self.camera), None, None, Some(self.config.height));
+        self.uniform.update(Some(&self.camera), None, None, Some((self.config.width, self.config.height)));
         self.uniform.update_buffer(&self.queue);
     }
 
