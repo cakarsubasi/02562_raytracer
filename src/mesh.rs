@@ -1,0 +1,141 @@
+use std::path::Path;
+
+use crate::{data_structures::{vector::{Vec4f32, Vec4u32, vec3f32, vec3u32}, bsp_tree::{AccObj, BspTree}, bbox::Bbox}, bindings::storage_mesh::{StorageMeshGpu, StorageMeshGpuSplit, StorageMeshGpuCombined}};
+
+///
+/// Mesh type containing vertices and indices in two vecs
+pub struct Mesh {
+    pub vertices: Vec<Vec4f32>,
+    pub normals: Vec<Vec4f32>,
+    pub indices: Vec<Vec4u32>,
+}
+
+impl std::fmt::Display for Mesh {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("Mesh: {{\n"))?;
+        f.write_fmt(format_args!("vertices: {{ \n"))?;
+        for v in self.vertices.iter() {
+            f.write_fmt(format_args!("\t{v:?}\n"))?;
+        }
+        f.write_fmt(format_args!("}} \n"))?;
+        f.write_fmt(format_args!("indices: {{ \n"))?;
+        for i in self.indices.iter() {
+            f.write_fmt(format_args!("\t{i:?}\n"))?;
+        }
+        f.write_fmt(format_args!("}} \n"))?;
+        Ok(())
+    }
+}
+
+impl Mesh {
+    pub fn bboxes(&self) -> Vec<AccObj> {
+        self.indices
+            .iter()
+            .enumerate()
+            .map(|(idx, triangle)| {
+                AccObj::new(
+                    idx.try_into().unwrap(),
+                    Bbox::from_triangle(
+                        self.vertices[triangle.0 as usize].xyz().into(),
+                        self.vertices[triangle.1 as usize].xyz().into(),
+                        self.vertices[triangle.2 as usize].xyz().into(),
+                    ),
+                )
+            })
+            .collect()
+    }
+
+    pub fn bsp_tree(&self) -> BspTree {
+        BspTree::new(self.bboxes(), 20, 4)
+    }
+
+    #[allow(dead_code)]
+    pub fn index_count(&self) -> u32 {
+        self.indices.len() as u32
+    }
+
+    pub fn scale(&mut self, factor: f32) {
+        self.vertices.iter_mut().for_each(|vert| {
+            vert.0 = vert.0 * factor;
+            vert.1 = vert.1 * factor;
+            vert.2 = vert.2 * factor;
+        });
+    }
+
+    pub fn from_obj<P>(file_name: P) -> anyhow::Result<Mesh>
+    where
+        P: AsRef<Path> + std::fmt::Debug,
+    {
+        let (models, _materials_maybe) = tobj::load_obj(
+            file_name,
+            &tobj::LoadOptions {
+                single_index: true,
+                triangulate: true,
+                ..Default::default()
+            },
+        )?;
+
+        let mut vertices_flat = vec![];
+        let mut normals_flat: Vec<Vec<Vec4f32>> = vec![];
+        let mut indices_flat = vec![];
+        models.iter().enumerate().for_each(|(idx, m)| {
+            let size = m.mesh.positions.len() / 3;
+            let mut vertices = Vec::with_capacity(size);
+            let mut normals = Vec::with_capacity(size);
+            for i in 0..size {
+                vertices.push(
+                    vec3f32(
+                        m.mesh.positions[i * 3],
+                        m.mesh.positions[i * 3 + 1],
+                        m.mesh.positions[i * 3 + 2],
+                    )
+                    .vec4(),
+                );
+                // TODO: allow optional normals
+                normals.push(
+                    vec3f32(
+                        m.mesh.normals[i * 3],
+                        m.mesh.normals[i * 3 + 1],
+                        m.mesh.normals[i * 3 + 2],
+                    )
+                    .vec4(),
+                )
+            }
+
+            let total: u32 = (0..idx)
+                .map(|i| models[i].mesh.positions.len() / 3)
+                .sum::<usize>() as u32;
+
+            let indices = (0..m.mesh.indices.len() / 3)
+                .map(|i| {
+                    vec3u32(
+                        total + m.mesh.indices[i * 3],
+                        total + m.mesh.indices[i * 3 + 1],
+                        total + m.mesh.indices[i * 3 + 2],
+                    )
+                    .vec4()
+                })
+                .collect::<Vec<_>>();
+            vertices_flat.push(vertices);
+            normals_flat.push(normals);
+            indices_flat.push(indices);
+        });
+        let vertices_flat = vertices_flat.into_iter().flatten().collect::<Vec<_>>();
+        let normals_flat = normals_flat.into_iter().flatten().collect::<Vec<_>>();
+        let indices_flat = indices_flat.into_iter().flatten().collect::<Vec<_>>();
+
+        Ok(Self {
+            vertices: vertices_flat,
+            normals: normals_flat,
+            indices: indices_flat,
+        })
+    }
+
+    pub fn into_gpu_split(&self, device: &wgpu::Device) -> StorageMeshGpu {
+        StorageMeshGpu::Split(StorageMeshGpuSplit::new(device, self))
+    }
+
+    pub fn into_gpu_combined(&self, device: &wgpu::Device) -> StorageMeshGpu {
+        StorageMeshGpu::Combined(StorageMeshGpuCombined::new(device, self))
+    }
+}

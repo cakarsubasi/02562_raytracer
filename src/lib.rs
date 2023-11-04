@@ -6,6 +6,7 @@ mod data_structures;
 mod gpu_handles;
 mod render_state;
 mod scenes;
+mod mesh;
 mod tools;
 
 use std::{path::Path, thread, time::Instant, sync::Arc};

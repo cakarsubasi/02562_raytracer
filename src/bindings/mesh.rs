@@ -2,6 +2,10 @@ use wgpu::util::DeviceExt;
 
 use super::vertex::Vertex;
 
+/// This mesh only contains vertices and indices passed
+/// directly to the Vertex shader
+/// For our purposes, we only pass 4 vertices and 6 indexes
+/// Which allows us to pass a canvas we can draw on in the fragment shader
 pub struct MeshGpu {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
