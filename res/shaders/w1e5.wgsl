@@ -41,20 +41,6 @@ struct Camera {
     constant: f32,
 };
 
-struct Light {
-    l_i: vec3f, // intensity
-    w_i: vec3f, // incidence
-    dist: f32, // distance
-};
-
-fn light_init() -> Light {
-    return Light(
-        vec3f(0.0),
-        vec3f(0.0),
-        999999.0,
-    );
-}
-
 struct HitRecord {
     has_hit: bool,
     depth: i32,
@@ -236,49 +222,10 @@ fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center
     return true;
 }
 
-fn sample_point_light(pos: vec3f) -> Light {
-    let light_pos = vec3f(0.0, 1.2, 0.0);
-    let light_intensity = 5.0 * vec3f(PI, PI, PI);
-    var light = light_init();
-    
-    let dir = light_pos - pos;
-    let dist = dot(dir, dir);
-
-    light.dist = dist;
-    light.l_i = light_intensity / (dist * dist);
-    light.w_i = dir;
-
-    return light;
-}
-
 fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     var color = vec3f(0.0, 0.0, 0.0);
     (*hit).has_hit = true;
     (*hit).depth += 1;
-    color = lambertian(r, hit);
+    color = (*hit).base_color;
     return color;
-}
-
-fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    var hit_record = *hit;
-    let light = sample_point_light(hit_record.position);
-    let normal = hit_record.normal;
-
-    let ambient = hit_record.base_color;
-    var diffuse = hit_record.base_color * light_diffuse_contribution(light, normal, 0.0);
-
-
-    return diffuse_and_ambient(diffuse, ambient);
-}
-
-fn light_diffuse_contribution(light: Light, normal: vec3f, specular: f32) -> vec3f {
-    let one_minus_specular = 1.0 - specular;
-    var diffuse = vec3f(dot(normal, light.w_i));
-    diffuse *= light.l_i;
-    diffuse *= one_minus_specular / PI;
-    return diffuse;
-}
-
-fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
-    return 0.9 * diffuse + 0.1 * ambient;
 }
