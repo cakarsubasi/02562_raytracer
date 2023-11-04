@@ -1,9 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::{
-    bindings::WgslBindDescriptor,
-    data_structures::vector::Vec4f32, mesh::Mesh,
-};
+use crate::{bindings::WgslBindDescriptor, data_structures::vector::Vec4f32, mesh::Mesh};
 
 use super::Bindable;
 
@@ -304,25 +301,57 @@ impl Bindable for GeometryGpuCombined {
 }
 
 struct MaterialsGpu {
-
+    materials_buffer: wgpu::Buffer,
 }
 impl MaterialsGpu {
     fn new(device: &wgpu::Device, mesh: &Mesh) -> Self {
-        
-        Self{}
+        let materials_slice = mesh.materials.as_slice();
+        let materials_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Model Vertex Buffer"),
+            contents: bytemuck::cast_slice(&materials_slice),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+        });
+        Self {
+            materials_buffer: materials_buffer,
+        }
     }
 }
 
 impl Bindable for MaterialsGpu {
-    fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> { 
-        vec![]
+    fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
+        vec![wgpu::BindGroupLayoutEntry {
+            // materials
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }]
     }
 
     fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
-        vec![]
+        vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: self.materials_buffer.as_entire_binding(),
+        }]
     }
 
     fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
-        vec![]
+        let struct_def = "struct Material {
+            diffuse: vec4f,
+            emission: vec4f,
+            specular: vec4f,
+        };";
+
+        vec![WgslBindDescriptor {
+            struct_def: Some(struct_def),
+            bind_type: Some("storage"),
+            var_name: "materials",
+            var_type: "array<Material>",
+            extra_code: None,
+        }]
     }
 }
