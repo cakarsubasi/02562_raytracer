@@ -294,6 +294,9 @@ pub async fn run() {
         .name("Render Thread".into())
         .spawn(move || rendering_thread(&mut render_state, receiver, scenes.clone()));
 
+    // Set initial state
+    control_panel.force_send_all(&transmitter);
+
     main_thread(
         gpu_handles,
         event_loop,

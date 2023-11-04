@@ -113,15 +113,15 @@ impl ControlPanel {
             platform,
             should_render: true,
             camera_constant: scenes[0].camera.constant,
-            sphere_material: ShaderType::Lambertian,
+            sphere_material: ShaderType::Glossy,
             other_material: ShaderType::Lambertian,
             scene_path: path,
             model_path: model,
             use_texture: true,
-            texture_uv_scale: (1.0, 1.0),
+            texture_uv_scale: (0.2, 0.2),
             pixel_subdivision: 1,
             render_resolution: scenes[0].res,
-            display_mode: DisplayMode::Stretch,
+            display_mode: DisplayMode::Exact,
             max_samples: 4096,
             window_id,
             current_scene: scenes[0].name.clone(),
@@ -544,5 +544,28 @@ impl ControlPanel {
                 .unwrap();
             }
         });
+    }
+
+    /// Send all messages corresponding to every state variable we are holding
+    /// Good for initialization
+    pub fn force_send_all(&self, commands: &Sender<Command>) {
+        commands.send(
+            Command::SetCameraConstant { constant: self.camera_constant }
+        ).unwrap();
+        commands.send(
+            Command::SetSphereMaterial { material: self.sphere_material }
+        ).unwrap();
+        commands.send(
+            Command::SetOtherMaterial { material: self.other_material }
+        ).unwrap();
+        commands.send(
+            Command::SetPixelSubdivision { level: self.pixel_subdivision  }
+        ).unwrap();
+        commands.send(
+            Command::SetTexture { use_texture: self.use_texture as u32, uv_scale: self.texture_uv_scale }
+        ).unwrap();
+        commands.send(
+            Command::SetResolution { resolution: self.render_resolution, display_mode: self.display_mode }
+        ).unwrap();
     }
 }
