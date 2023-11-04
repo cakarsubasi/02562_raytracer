@@ -80,6 +80,14 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             ..Default::default()
         },
         SceneDescriptor {
+            name: String::from("W1 E2"),
+            shader: PathBuf::from("res/shaders/w1e2.wgsl"),
+            model: None,
+            camera: basic_scene_camera.clone(),
+            res: (512, 512),
+            ..Default::default()
+        },
+        SceneDescriptor {
             name: String::from("W1 E3"),
             shader: PathBuf::from("res/shaders/w1e3.wgsl"),
             model: None,
