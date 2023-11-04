@@ -10,11 +10,13 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Zeroable, bytemuck::Pod)]
+#[derive(Copy, Clone, Debug, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct Material {
     diffuse: Vec4f32,
-    emission: Vec4f32,
+    ambient: Vec4f32,
     specular: Vec4f32,
+    emissive: u32,
+    _padding0: [u32; 3],
 }
 
 ///
@@ -67,7 +69,7 @@ impl Mesh {
                 } else {
                     vec3f32(1.0, 1.0, 1.0)
                 }.vec4();
-                let emission = if let Some(ambient) = m.ambient {
+                let ambient = if let Some(ambient) = m.ambient {
                     ambient.into()
                 } else {
                     vec3f32(0.0, 0.0, 0.0)
@@ -77,11 +79,18 @@ impl Mesh {
                 } else {
                     vec3f32(0.0, 0.0, 0.0)
                 }.vec4();
+                let emissive = if let Some(illumination) = m.illumination_model {
+                    illumination as u32
+                } else {
+                    0
+                };
 
                 Material {
                     diffuse,
-                    emission,
+                    ambient,
                     specular,
+                    emissive,
+                    _padding0: [0, 0, 0],
                 }
             }).collect()
         } else {
@@ -209,7 +218,7 @@ mod mesh_test {
     #[test]
     fn bsp_tree_new() {
         let _model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
-
+        println!("{:?}", _model.materials);
     }
 
 }

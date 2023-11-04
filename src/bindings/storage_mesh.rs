@@ -342,8 +342,9 @@ impl Bindable for MaterialsGpu {
     fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
         let struct_def = "struct Material {
             diffuse: vec4f,
-            emission: vec4f,
+            ambient: vec4f,
             specular: vec4f,
+            emissive: u32,
         };";
 
         vec![WgslBindDescriptor {
