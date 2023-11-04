@@ -197,8 +197,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 fn texture_sample(hit: ptr<function, HitRecord>) -> vec3f {
     // Note that we are ignoring the potential alpha channel within the texture here
     var uv0_scaled = fract((*hit).uv0 * uniforms.uv_scale);
-
-    return textureSample(texture0, sampler0, uv0_scaled).xyz;
+    let result = textureSample(texture0, sampler0, uv0_scaled).xyz;
+    return result;
 }
 
 fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
@@ -213,15 +213,11 @@ fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool
     has_hit = has_hit || wrap_shader(intersect_triangle(r, hit, arr), hit, shader);
 
     shader.shader = uniforms.selection1;
-
-    has_hit = has_hit || wrap_shader(intersect_sphere(r, hit, arr[0], 0.05), hit, shader);
-    has_hit = has_hit || wrap_shader(intersect_sphere(r, hit, arr[1], 0.05), hit, shader);
-    has_hit = has_hit || wrap_shader(intersect_sphere(r, hit, arr[2], 0.05), hit, shader);
     has_hit = has_hit || wrap_shader(intersect_sphere(r, hit, vec3f(0.0, 0.5, 0.0), 0.3), hit, shader);
     
     shader.base_color = vec3f(0.1, 0.7, 0.0);
     shader.shader = uniforms.selection2;
-    if (uniforms.use_texture == 1u) {
+    if (uniforms.use_texture > 0u) {
         shader.use_texture = true;
     } else {
         shader.use_texture = false;

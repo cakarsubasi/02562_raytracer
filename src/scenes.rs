@@ -9,7 +9,7 @@ pub enum VertexType {
     Combined,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SceneDescriptor {
     pub name: String,
     pub shader: PathBuf,
@@ -19,11 +19,24 @@ pub struct SceneDescriptor {
     pub res: (u32, u32),
 }
 
+impl Default for SceneDescriptor {
+    fn default() -> Self {
+        Self {
+            name: Default::default(),
+            shader: Default::default(),
+            vertex_type: Default::default(),
+            model: Default::default(),
+            camera: Default::default(),
+            res: (512, 512),
+        }
+    }
+}
+
 pub fn get_scenes() -> Arc<[SceneDescriptor]> {
     let basic_scene_camera = Camera {
         eye: (2.0, 1.5, 2.0).into(),
         target: (0.0, 0.5, 0.0).into(),
-        up: (0.0, 1.0, 0.0).into(), 
+        up: (0.0, 1.0, 0.0).into(),
         constant: 1.0,
         ..Default::default()
     };
@@ -31,7 +44,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
     let utah_teapot_camera = Camera {
         eye: (0.15, 1.5, 10.0).into(),
         target: (0.15, 1.5, 0.0).into(),
-        up: (0.0, 1.0, 0.0).into(), 
+        up: (0.0, 1.0, 0.0).into(),
         constant: 2.5,
         ..Default::default()
     };
@@ -39,7 +52,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
     let cornell_box_camera = Camera {
         eye: (277.0, 275.0, -570.0).into(),
         target: (277.0, 275.0, 0.0).into(),
-        up: (0.0, 1.0, 0.0).into(), 
+        up: (0.0, 1.0, 0.0).into(),
         constant: 1.0,
         ..Default::default()
     };
@@ -47,7 +60,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
     let bunny_camera = Camera {
         eye: (-0.02, 0.11, 0.6).into(),
         target: (-0.02, 0.11, 0.0).into(),
-        up: (0.0, 1.0, 0.0).into(), 
+        up: (0.0, 1.0, 0.0).into(),
         constant: 3.5,
         ..Default::default()
     };
@@ -59,13 +72,29 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
 
     Arc::new([
         SceneDescriptor {
-            name: String::from("Default"),
-            shader: PathBuf::from("res/shaders/shader.wgsl"),
-            model: Some(teapot_path.clone()),
-            camera: utah_teapot_camera.clone(),
+            name: String::from("W3 E3"),
+            shader: PathBuf::from("res/shaders/w3e3.wgsl"),
+            model: None,
+            camera: basic_scene_camera.clone(),
             res: (512, 512),
             ..Default::default()
         },
+        SceneDescriptor {
+            name: String::from("W3 E4"),
+            shader: PathBuf::from("res/shaders/w3e4.wgsl"),
+            model: None,
+            camera: basic_scene_camera.clone(),
+            res: (512, 512),
+            ..Default::default()
+        },
+        //SceneDescriptor {
+        //    name: String::from("Default"),
+        //    shader: PathBuf::from("res/shaders/shader.wgsl"),
+        //    model: Some(cornell_box_path.clone()),
+        //    camera: cornell_box_camera.clone(),
+        //    res: (512, 512),
+        //    ..Default::default()
+        //},
         //SceneDescriptor {
         //    name: String::from("Worksheet 1"),
         //    shader: PathBuf::from("res/shaders/worksheet1.wgsl"),
@@ -132,6 +161,6 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
         //    model: Some(cornell_box_with_blocks_path.clone()),
         //    camera: cornell_box_camera.clone(),
         //    res: (512, 512),
-        //},  
+        //},
     ])
 }
