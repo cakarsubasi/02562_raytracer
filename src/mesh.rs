@@ -1,13 +1,30 @@
 use std::path::Path;
 
-use crate::{data_structures::{vector::{Vec4f32, Vec4u32, vec3f32, vec3u32}, bsp_tree::{AccObj, BspTree}, bbox::Bbox}, bindings::storage_mesh::{StorageMeshGpu, StorageMeshGpuSplit, StorageMeshGpuCombined}};
+use crate::{
+    bindings::storage_mesh::{StorageMeshGpu, StorageMeshGpuCombined, StorageMeshGpuSplit},
+    data_structures::{
+        bbox::Bbox,
+        bsp_tree::{AccObj, BspTree},
+        vector::{vec3f32, vec3u32, Vec4f32, Vec4u32, vec4u32},
+    },
+};
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Zeroable, bytemuck::Pod)]
+pub struct Material {
+    diffuse: Vec4f32,
+    emission: Vec4f32,
+    specular: Vec4f32,
+}
 
 ///
 /// Mesh type containing vertices and indices in two vecs
 pub struct Mesh {
     pub vertices: Vec<Vec4f32>,
     pub normals: Vec<Vec4f32>,
+    /// last index in the indices contains material type
     pub indices: Vec<Vec4u32>,
+    pub materials: Vec<Material>,
 }
 
 impl std::fmt::Display for Mesh {
@@ -28,6 +45,117 @@ impl std::fmt::Display for Mesh {
 }
 
 impl Mesh {
+
+    pub fn from_obj<P>(file_name: P) -> anyhow::Result<Mesh>
+    where
+        P: AsRef<Path> + std::fmt::Debug,
+    {
+        let (models, materials_maybe) = tobj::load_obj(
+            file_name,
+            &tobj::LoadOptions {
+                single_index: true,
+                triangulate: true,
+                ..Default::default()
+            },
+        )?;
+
+        let materials = 
+        if let Ok(materials_obj) = materials_maybe {
+            materials_obj.iter().map( |m| {
+                let diffuse = if let Some(diffuse) = m.diffuse {
+                    diffuse.into()
+                } else {
+                    vec3f32(1.0, 1.0, 1.0)
+                }.vec4();
+                let emission = if let Some(ambient) = m.ambient {
+                    ambient.into()
+                } else {
+                    vec3f32(0.0, 0.0, 0.0)
+                }.vec4();
+                let specular = if let Some(specular) = m.specular {
+                    specular.into()
+                } else {
+                    vec3f32(0.0, 0.0, 0.0)
+                }.vec4();
+
+                Material {
+                    diffuse,
+                    emission,
+                    specular,
+                }
+            }).collect()
+        } else {
+            vec![]
+        };
+
+        let mut vertices_flat = vec![];
+        let mut normals_flat: Vec<Vec<Vec4f32>> = vec![];
+        let mut indices_flat = vec![];
+        models.iter().enumerate().for_each(|(idx, m)| {
+            let position_number = m.mesh.positions.len() / 3;
+            let normal_number = m.mesh.normals.len() / 3;
+            let mut vertices = Vec::with_capacity(position_number);
+            let mut normals = Vec::with_capacity(normal_number);
+            for i in 0..position_number {
+                vertices.push(
+                    vec3f32(
+                        m.mesh.positions[i * 3],
+                        m.mesh.positions[i * 3 + 1],
+                        m.mesh.positions[i * 3 + 2],
+                    )
+                    .vec4(),
+                );
+            }
+            for i in 0..normal_number {
+                normals.push(
+                    vec3f32(
+                        m.mesh.normals[i * 3],
+                        m.mesh.normals[i * 3 + 1],
+                        m.mesh.normals[i * 3 + 2],
+                    )
+                    .vec4(),
+                );
+            }
+
+            let total: u32 = (0..idx)
+                .map(|i| models[i].mesh.positions.len() / 3)
+                .sum::<usize>() as u32;
+            
+
+            let indices = (0..m.mesh.indices.len() / 3)
+                .map(|i| {
+                    vec4u32(
+                        total + m.mesh.indices[i * 3],
+                        total + m.mesh.indices[i * 3 + 1],
+                        total + m.mesh.indices[i * 3 + 2],
+                        m.mesh.material_id.unwrap_or(u32::MAX as usize) as u32,
+                    )
+                })
+                .collect::<Vec<_>>();
+            vertices_flat.push(vertices);
+            normals_flat.push(normals);
+            indices_flat.push(indices);
+        });
+        let vertices_flat = vertices_flat.into_iter().flatten().collect::<Vec<_>>();
+        let normals_flat = normals_flat.into_iter().flatten().collect::<Vec<_>>();
+        let indices_flat = indices_flat.into_iter().flatten().collect::<Vec<_>>();
+
+        Ok(Self {
+            vertices: vertices_flat,
+            normals: normals_flat,
+            indices: indices_flat,
+            materials,
+        })
+    }
+
+    pub fn into_gpu_split(&self, device: &wgpu::Device) -> StorageMeshGpu {
+        StorageMeshGpu::Split(StorageMeshGpuSplit::new(device, self))
+    }
+
+    pub fn into_gpu_combined(&self, device: &wgpu::Device) -> StorageMeshGpu {
+        StorageMeshGpu::Combined(StorageMeshGpuCombined::new(device, self))
+    }
+
     pub fn bboxes(&self) -> Vec<AccObj> {
         self.indices
             .iter()
@@ -61,81 +189,17 @@ impl Mesh {
             vert.2 = vert.2 * factor;
         });
     }
+}
 
-    pub fn from_obj<P>(file_name: P) -> anyhow::Result<Mesh>
-    where
-        P: AsRef<Path> + std::fmt::Debug,
-    {
-        let (models, _materials_maybe) = tobj::load_obj(
-            file_name,
-            &tobj::LoadOptions {
-                single_index: true,
-                triangulate: true,
-                ..Default::default()
-            },
-        )?;
+#[cfg(test)]
+mod mesh_test {
 
-        let mut vertices_flat = vec![];
-        let mut normals_flat: Vec<Vec<Vec4f32>> = vec![];
-        let mut indices_flat = vec![];
-        models.iter().enumerate().for_each(|(idx, m)| {
-            let size = m.mesh.positions.len() / 3;
-            let mut vertices = Vec::with_capacity(size);
-            let mut normals = Vec::with_capacity(size);
-            for i in 0..size {
-                vertices.push(
-                    vec3f32(
-                        m.mesh.positions[i * 3],
-                        m.mesh.positions[i * 3 + 1],
-                        m.mesh.positions[i * 3 + 2],
-                    )
-                    .vec4(),
-                );
-                // TODO: allow optional normals
-                normals.push(
-                    vec3f32(
-                        m.mesh.normals[i * 3],
-                        m.mesh.normals[i * 3 + 1],
-                        m.mesh.normals[i * 3 + 2],
-                    )
-                    .vec4(),
-                )
-            }
+    use super::*;
 
-            let total: u32 = (0..idx)
-                .map(|i| models[i].mesh.positions.len() / 3)
-                .sum::<usize>() as u32;
+    #[test]
+    fn bsp_tree_new() {
+        let _model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
 
-            let indices = (0..m.mesh.indices.len() / 3)
-                .map(|i| {
-                    vec3u32(
-                        total + m.mesh.indices[i * 3],
-                        total + m.mesh.indices[i * 3 + 1],
-                        total + m.mesh.indices[i * 3 + 2],
-                    )
-                    .vec4()
-                })
-                .collect::<Vec<_>>();
-            vertices_flat.push(vertices);
-            normals_flat.push(normals);
-            indices_flat.push(indices);
-        });
-        let vertices_flat = vertices_flat.into_iter().flatten().collect::<Vec<_>>();
-        let normals_flat = normals_flat.into_iter().flatten().collect::<Vec<_>>();
-        let indices_flat = indices_flat.into_iter().flatten().collect::<Vec<_>>();
-
-        Ok(Self {
-            vertices: vertices_flat,
-            normals: normals_flat,
-            indices: indices_flat,
-        })
     }
 
-    pub fn into_gpu_split(&self, device: &wgpu::Device) -> StorageMeshGpu {
-        StorageMeshGpu::Split(StorageMeshGpuSplit::new(device, self))
-    }
-
-    pub fn into_gpu_combined(&self, device: &wgpu::Device) -> StorageMeshGpu {
-        StorageMeshGpu::Combined(StorageMeshGpuCombined::new(device, self))
-    }
 }

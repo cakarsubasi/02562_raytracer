@@ -35,6 +35,11 @@ pub const fn vec3u32(u0: u32, u1: u32, u2: u32) -> Vec3<u32> {
     Vec3::<u32>(u0, u1, u2)
 }
 
+#[inline(always)]
+pub const fn vec4u32(u0: u32, u1: u32, u2: u32, u3: u32) -> Vec4<u32> {
+    Vec4::<u32>(u0, u1, u2, u3)
+}
+
 /// Vec3 Methods
 ///
 

@@ -1,21 +1,11 @@
-use std::path::Path;
-
 use wgpu::util::DeviceExt;
 
 use crate::{
     bindings::WgslBindDescriptor,
-    data_structures::{
-        bbox::Bbox,
-        bsp_tree::{AccObj, BspTree},
-        vector::{vec3f32, vec3u32, Vec4f32, Vec4u32},
-    }, mesh::Mesh,
+    data_structures::vector::Vec4f32, mesh::Mesh,
 };
 
 use super::Bindable;
-
-type ModelVertex = Vec4f32;
-type ModelNormal = Vec4f32;
-type ModelIndex = Vec4u32;
 
 pub enum StorageMeshGpu {
     Split(StorageMeshGpuSplit),
