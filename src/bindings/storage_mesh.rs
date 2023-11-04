@@ -83,13 +83,13 @@ impl GeometryGpuSplit {
     pub fn new(device: &wgpu::Device, mesh: &Mesh) -> Self {
         let vertex_buffer_slice = mesh.vertices.as_slice();
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Model Vertex Buffer"),
+            label: Some("Model Vertex Buffer Split"),
             contents: bytemuck::cast_slice(&vertex_buffer_slice),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
         });
         let vertex_normal_slice = mesh.normals.as_slice();
         let vertex_normal_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Model Vertex Buffer"),
+            label: Some("Model Vertex Normal Buffer Split"),
             contents: bytemuck::cast_slice(&vertex_normal_slice),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
         });
@@ -217,7 +217,7 @@ impl GeometryGpuCombined {
             })
             .collect::<Vec<_>>();
         let combined_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Model Vertex Buffer"),
+            label: Some("Model Vertex Buffer Combined"),
             contents: bytemuck::cast_slice(&combined_slice),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
         });
@@ -307,7 +307,7 @@ impl MaterialsGpu {
     fn new(device: &wgpu::Device, mesh: &Mesh) -> Self {
         let materials_slice = mesh.materials.as_slice();
         let materials_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Model Vertex Buffer"),
+            label: Some("Materials Buffer"),
             contents: bytemuck::cast_slice(&materials_slice),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
         });

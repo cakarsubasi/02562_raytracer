@@ -106,16 +106,26 @@ impl Mesh {
                     .vec4(),
                 );
             }
-            for i in 0..normal_number {
-                normals.push(
-                    vec3f32(
-                        m.mesh.normals[i * 3],
-                        m.mesh.normals[i * 3 + 1],
-                        m.mesh.normals[i * 3 + 2],
-                    )
-                    .vec4(),
-                );
+            if normal_number == position_number {
+                for i in 0..normal_number {
+                    normals.push(
+                        vec3f32(
+                            m.mesh.normals[i * 3],
+                            m.mesh.normals[i * 3 + 1],
+                            m.mesh.normals[i * 3 + 2],
+                        )
+                        .vec4(),
+                    );
+                }
+            } else {
+                for _ in 0..position_number {
+                    normals.push(
+                        vec3f32(0.0, 0.0, 0.0)
+                        .vec4(),
+                    );
+                }
             }
+
 
             let total: u32 = (0..idx)
                 .map(|i| models[i].mesh.positions.len() / 3)
