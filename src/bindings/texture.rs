@@ -6,9 +6,11 @@ use super::{Bindable, WgslBindDescriptor};
 // Taken from learnwgpu
 
 pub struct Texture {
-    pub texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
-    pub sampler: wgpu::Sampler,
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    sampler_default: wgpu::Sampler,
+    sampler_bilinear: wgpu::Sampler,
+    sampler_no_filtering: wgpu::Sampler,
 }
 
 impl Texture {
@@ -28,12 +30,14 @@ impl Texture {
         img: &image::DynamicImage,
         label: Option<&str>,
     ) -> Result<Self> {
-        let (texture, view, sampler) = Self::build(device, queue, img, label);
+        let (texture, view, sampler_default, sampler_bilinear, sampler_no_filtering) = Self::build(device, queue, img, label);
 
         Ok(Self {
             texture,
             view,
-            sampler,
+            sampler_default,
+            sampler_bilinear,
+            sampler_no_filtering,
         })
     }
 
@@ -42,7 +46,7 @@ impl Texture {
         queue: &wgpu::Queue,
         image: &image::DynamicImage,
         label: Option<&str>,
-    ) -> (wgpu::Texture, wgpu::TextureView, wgpu::Sampler) {
+    ) -> (wgpu::Texture, wgpu::TextureView, wgpu::Sampler, wgpu::Sampler, wgpu::Sampler) {
         let rgba = image.to_rgba8();
         let dimensions = image.dimensions();
 
@@ -79,7 +83,7 @@ impl Texture {
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        let sampler_default = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -88,8 +92,26 @@ impl Texture {
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
+        let sampler_bilinear = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let sampler_no_filtering = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
 
-        (texture, view, sampler)
+        (texture, view, sampler_default, sampler_bilinear, sampler_no_filtering)
     }
 }
 
@@ -99,6 +121,16 @@ impl Bindable for Texture {
             wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
                 // This should match the filterable field of the
                 // corresponding Texture entry above.
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
@@ -107,13 +139,20 @@ impl Bindable for Texture {
             wgpu::BindGroupLayoutEntry {
                 binding: 1,
                 visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    multisampled: false,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                },
+                // This should match the filterable field of the
+                // corresponding Texture entry above.
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                // This should match the filterable field of the
+                // corresponding Texture entry above.
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                count: None,
+            },
+
         ]
     }
 
@@ -121,11 +160,19 @@ impl Bindable for Texture {
         vec![
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Sampler(&self.sampler),
+                resource: wgpu::BindingResource::TextureView(&self.view),
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::TextureView(&self.view),
+                resource: wgpu::BindingResource::Sampler(&self.sampler_default),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&self.sampler_bilinear),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&self.sampler_no_filtering),
             },
         ]
     }
@@ -136,6 +183,13 @@ impl Bindable for Texture {
             WgslBindDescriptor {
                 struct_def: None,
                 bind_type: None,
+                var_name: "texture0",
+                var_type: "texture_2d<f32>",
+                extra_code: None,
+            },
+            WgslBindDescriptor {
+                struct_def: None,
+                bind_type: None,
                 var_name: "sampler0",
                 var_type: "sampler",
                 extra_code: None,
@@ -143,8 +197,15 @@ impl Bindable for Texture {
             WgslBindDescriptor {
                 struct_def: None,
                 bind_type: None,
-                var_name: "texture0",
-                var_type: "texture_2d<f32>",
+                var_name: "sampler0_bilinear",
+                var_type: "sampler",
+                extra_code: None,
+            },
+            WgslBindDescriptor {
+                struct_def: None,
+                bind_type: None,
+                var_name: "sampler0_nearest",
+                var_type: "sampler",
                 extra_code: None,
             },
         ]
