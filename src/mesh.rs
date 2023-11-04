@@ -1,11 +1,11 @@
 use std::path::Path;
 
 use crate::{
-    bindings::storage_mesh::{StorageMeshGpu, StorageMeshGpuCombined, StorageMeshGpuSplit},
+    bindings::storage_mesh::{GeometryGpuCombined, GeometryGpuSplit, StorageMeshGpu},
     data_structures::{
         bbox::Bbox,
         bsp_tree::{AccObj, BspTree},
-        vector::{vec3f32, vec3u32, Vec4f32, Vec4u32, vec4u32},
+        vector::{vec3f32, Vec4f32, Vec4u32, vec4u32},
     },
 };
 
@@ -149,11 +149,11 @@ impl Mesh {
     }
 
     pub fn into_gpu_split(&self, device: &wgpu::Device) -> StorageMeshGpu {
-        StorageMeshGpu::Split(StorageMeshGpuSplit::new(device, self))
+        StorageMeshGpu::new_split(device, self)
     }
 
     pub fn into_gpu_combined(&self, device: &wgpu::Device) -> StorageMeshGpu {
-        StorageMeshGpu::Combined(StorageMeshGpuCombined::new(device, self))
+        StorageMeshGpu::new_combined(device, self)
     }
 
     pub fn bboxes(&self) -> Vec<AccObj> {

@@ -7,41 +7,82 @@ use crate::{
 
 use super::Bindable;
 
-pub enum StorageMeshGpu {
-    Split(StorageMeshGpuSplit),
-    Combined(StorageMeshGpuCombined),
+pub struct StorageMeshGpu {
+    geometry: GeometryGpu,
+    materials: MaterialsGpu,
+}
+
+impl StorageMeshGpu {
+    pub fn new_split(device: &wgpu::Device, mesh: &Mesh) -> Self {
+        Self {
+            geometry: GeometryGpu::Split(GeometryGpuSplit::new(device, mesh)),
+            materials: MaterialsGpu::new(device, mesh),
+        }
+    }
+
+    pub fn new_combined(device: &wgpu::Device, mesh: &Mesh) -> Self {
+        Self {
+            geometry: GeometryGpu::Combined(GeometryGpuCombined::new(device, mesh)),
+            materials: MaterialsGpu::new(device, mesh),
+        }
+    }
 }
 
 impl Bindable for StorageMeshGpu {
     fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
+        let mut layout_entries = self.geometry.get_layout_entries();
+        layout_entries.append(&mut self.materials.get_layout_entries());
+        layout_entries
+    }
+
+    fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
+        let mut bind_group_entries = self.geometry.get_bind_group_entries();
+        bind_group_entries.append(&mut self.materials.get_bind_group_entries());
+        bind_group_entries
+    }
+
+    fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
+        let mut bind_descriptors = self.geometry.get_bind_descriptor();
+        bind_descriptors.append(&mut self.materials.get_bind_descriptor());
+        bind_descriptors
+    }
+}
+
+enum GeometryGpu {
+    Split(GeometryGpuSplit),
+    Combined(GeometryGpuCombined),
+}
+
+impl Bindable for GeometryGpu {
+    fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
         match self {
-            StorageMeshGpu::Split(split) => split.get_layout_entries(),
-            StorageMeshGpu::Combined(combined) => combined.get_layout_entries(),
+            GeometryGpu::Split(split) => split.get_layout_entries(),
+            GeometryGpu::Combined(combined) => combined.get_layout_entries(),
         }
     }
 
     fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
         match self {
-            StorageMeshGpu::Split(split) => split.get_bind_group_entries(),
-            StorageMeshGpu::Combined(combined) => combined.get_bind_group_entries(),
+            GeometryGpu::Split(split) => split.get_bind_group_entries(),
+            GeometryGpu::Combined(combined) => combined.get_bind_group_entries(),
         }
     }
 
     fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
         match self {
-            StorageMeshGpu::Split(split) => split.get_bind_descriptor(),
-            StorageMeshGpu::Combined(combined) => combined.get_bind_descriptor(),
+            GeometryGpu::Split(split) => split.get_bind_descriptor(),
+            GeometryGpu::Combined(combined) => combined.get_bind_descriptor(),
         }
     }
 }
 
-pub struct StorageMeshGpuSplit {
+pub struct GeometryGpuSplit {
     pub vertex_buffer: wgpu::Buffer,
     pub vertex_normal_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
 }
 
-impl StorageMeshGpuSplit {
+impl GeometryGpuSplit {
     pub fn new(device: &wgpu::Device, mesh: &Mesh) -> Self {
         let vertex_buffer_slice = mesh.vertices.as_slice();
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -71,7 +112,7 @@ impl StorageMeshGpuSplit {
     }
 }
 
-impl Bindable for StorageMeshGpuSplit {
+impl Bindable for GeometryGpuSplit {
     fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
         vec![
             wgpu::BindGroupLayoutEntry {
@@ -155,7 +196,7 @@ impl Bindable for StorageMeshGpuSplit {
     }
 }
 
-pub struct StorageMeshGpuCombined {
+pub struct GeometryGpuCombined {
     pub combined_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
 }
@@ -167,7 +208,7 @@ struct CombinedVertexNormal {
     normal: Vec4f32,
 }
 
-impl StorageMeshGpuCombined {
+impl GeometryGpuCombined {
     pub fn new(device: &wgpu::Device, mesh: &Mesh) -> Self {
         let combined_slice = mesh
             .vertices
@@ -197,7 +238,7 @@ impl StorageMeshGpuCombined {
     }
 }
 
-impl Bindable for StorageMeshGpuCombined {
+impl Bindable for GeometryGpuCombined {
     fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
         vec![
             wgpu::BindGroupLayoutEntry {
@@ -259,5 +300,29 @@ impl Bindable for StorageMeshGpuCombined {
                 extra_code: None,
             },
         ]
+    }
+}
+
+pub struct MaterialsGpu {
+
+}
+impl MaterialsGpu {
+    fn new(device: &wgpu::Device, mesh: &Mesh) -> Self {
+        
+        Self{}
+    }
+}
+
+impl Bindable for MaterialsGpu {
+    fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> { 
+        vec![]
+    }
+
+    fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
+        vec![]
+    }
+
+    fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
+        vec![]
     }
 }

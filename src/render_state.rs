@@ -1,4 +1,5 @@
 use crate::SceneDescriptor;
+use crate::bindings::storage_mesh::StorageMeshGpu;
 use crate::bindings::texture::RenderSource;
 use crate::mesh::Mesh;
 use crate::{
@@ -6,7 +7,6 @@ use crate::{
         bsp_tree::BspTreeGpu,
         create_bind_group_layouts, create_bind_groups, create_shader_definitions,
         mesh::MeshGpu,
-        storage_mesh::StorageMeshGpu,
         texture::{RenderDestination, Texture},
         uniform::UniformGpu,
         vertex::{self, Vertex},
