@@ -192,16 +192,32 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             ..Default::default()
         },
         SceneDescriptor {
-            name: String::from("W5 Teapot"),
-            shader: PathBuf::from("res/shaders/w05_teapot.wgsl"),
+            name: String::from("W5 E2 Teapot"),
+            shader: PathBuf::from("res/shaders/w5e2.wgsl"),
             model: Some(teapot_path.clone()),
             camera: utah_teapot_camera.clone(),
             res: (800, 450),
             ..Default::default()
         },
         SceneDescriptor {
-            name: String::from("W5 Cornell Box"),
-            shader: PathBuf::from("res/shaders/w05_cornell_box.wgsl"),
+            name: String::from("W5 E3 Teapot"),
+            shader: PathBuf::from("res/shaders/w5e3.wgsl"),
+            model: Some(teapot_path.clone()),
+            camera: utah_teapot_camera.clone(),
+            res: (800, 450),
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("W5 E4 Cornell Box"),
+            shader: PathBuf::from("res/shaders/w5e4.wgsl"),
+            model: Some(cornell_box_path.clone()),
+            camera: cornell_box_camera.clone(),
+            res: (512, 512),
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("W5 E5 Cornell Box"),
+            shader: PathBuf::from("res/shaders/w5e5.wgsl"),
             model: Some(cornell_box_path.clone()),
             camera: cornell_box_camera.clone(),
             res: (512, 512),
