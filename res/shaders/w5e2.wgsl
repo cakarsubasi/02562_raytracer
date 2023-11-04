@@ -186,9 +186,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let max_depth = MAX_DEPTH;
     let uv = in.coords * 0.5;
     let subdiv = uniforms.subdivision_level;
-
-    let curr_sum = textureLoad(renderTexture, vec2u(in.clip_position.xy), 0).rgb*f32(uniforms.resolution.x);
-
+    
     var result = vec3f(0.0);
     var textured = vec3f(0.0);
     // each loop is one bounce
@@ -259,33 +257,6 @@ fn wrap_shader(has_hit: bool, hit: ptr<function, HitRecord>, shader: Shader) -> 
     return has_hit;
 }
 
-struct Onb {
-    tangent: vec3f,
-    binormal: vec3f,
-    normal: vec3f,
-};
-const plane_onb = Onb(vec3f(-1.0, 0.0, 0.0), vec3f(0.0, 0.0, 1.0), vec3f(0.0, 1.0, 0.0));
-
-fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, plane: Onb, position: vec3f) -> bool {
-    let ray = *r;
-    let normal = plane_onb.normal;
-    let distance = dot((position - ray.origin), normal)/(dot(ray.direction, normal));
-    if (distance < ray.tmin || distance > ray.tmax) {
-        return false;
-    }
-    (*r).tmax = distance;
-    (*hit).dist = distance;
-    let pos = ray_at(ray, distance);
-    (*hit).position = pos;
-    (*hit).normal = normal;
-
-    let u = dot((pos - position), plane.tangent) % 1.0;
-    let v = dot((pos - position), plane.binormal) % 1.0;
-
-    (*hit).uv0 = vec2f(abs(u), abs(v));
-    return true;
-}
-
 fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: array<vec3f, 3>) -> bool {
     let ray = *r;
     let w_i = ray.direction;
@@ -324,34 +295,6 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
     let v3 = indexBuffer[v].z;
     let arr = array<vec3f, 3>(vertexBuffer[v1].xyz, vertexBuffer[v2].xyz, vertexBuffer[v3].xyz);
     return intersect_triangle(r, hit, arr);
-}
-
-fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center: vec3f, radius: f32) -> bool {
-    let ray = *r;
-    let oc = ray.origin - center;
-    let a = dot(ray.direction, ray.direction);
-    let b_over_2 = dot(oc, ray.direction);
-    let c = dot(oc, oc) - radius * radius;
-    let discriminant = b_over_2 * b_over_2 - a * c;
-    if (discriminant < 0.0) {
-        return false;
-    }
-    let disc_sqrt = sqrt(discriminant);
-    var root = (- b_over_2 - disc_sqrt) / a;
-    if (root < ray.tmin || root > ray.tmax) {
-        root = (- b_over_2 + disc_sqrt) / a;
-        if (root < ray.tmin || root > ray.tmax) {
-            return false;
-        }
-    }
-
-    (*r).tmax = root;
-    (*hit).dist = root;
-    let pos = ray_at(ray, root);
-    let normal = normalize(pos - center);
-    (*hit).position = pos;
-    (*hit).normal = normal;
-    return true;
 }
 
 fn sample_point_light(pos: vec3f) -> Light {

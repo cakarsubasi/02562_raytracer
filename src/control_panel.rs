@@ -444,6 +444,9 @@ impl ControlPanel {
                                     idx
                                 })
                                 .unwrap();
+                            let scene = &self.scenes[idx];
+                            self.camera_constant = scene.camera.constant;
+                            self.render_resolution = scene.res;
                             self.force_send_all(commands);
                         }
                     }
