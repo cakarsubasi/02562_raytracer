@@ -18,14 +18,17 @@ pub enum Command {
     Shutdown { value: bool },
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, IntoStaticStr, PartialEq)]
+#[derive(Copy, Clone, Default, Debug, EnumIter, IntoStaticStr, PartialEq)]
 pub enum DisplayMode {
     /// window size has 1-to-1 correspondance with the rendering resolution
+    #[default]
     Exact,
     /// rendering resolution is independent from window size
     Stretch,
     /// Window is automatically adjusted to fit either the horizontal or vertical maximum
     FitAuto,
+    /// Render as high as the window size!
+    Window,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, EnumIter, IntoStaticStr)]
@@ -43,7 +46,7 @@ pub enum ShaderType {
 pub enum TextureUse {
     NoTexture = 0,
     Default = 1,
-    Nearest = 2,
-    Bilinear = 3,
+    Bilinear = 2,
+    Nearest = 3,
 }
 

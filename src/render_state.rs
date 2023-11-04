@@ -1,6 +1,7 @@
 use crate::SceneDescriptor;
 use crate::bindings::storage_mesh::StorageMeshGpu;
 use crate::bindings::texture::RenderSource;
+use crate::command::DisplayMode;
 use crate::mesh::Mesh;
 use crate::{
     bindings::{
@@ -35,6 +36,7 @@ pub struct RenderState {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    display_mode: DisplayMode,
     pub size: winit::dpi::PhysicalSize<u32>,
     window: Window,
     render_pipeline_layout: wgpu::PipelineLayout,
@@ -134,6 +136,7 @@ impl RenderState {
             surface,
             render_source,
             render_destination,
+            display_mode: DisplayMode::Exact, // this should be fairly safe
             device,
             queue,
             config,
@@ -429,11 +432,8 @@ impl RenderState {
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        if new_size.width > 0 && new_size.height > 0 {
-            self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
+        if self.display_mode == DisplayMode::Window {
+            self.set_render_resolution((new_size.width, new_size.height));
         }
     }
 
@@ -541,19 +541,22 @@ impl RenderState {
     pub fn set_display_mode(
         &mut self,
         resolution: (u32, u32),
-        _display_mode: crate::command::DisplayMode,
+        display_mode: DisplayMode,
     ) -> Result<()> {
+        self.set_render_resolution(resolution);
+        // TODO: use display_mode to do funny things
+        self.display_mode = display_mode;
+        Ok(())
+    }
+
+    fn set_render_resolution(&mut self, resolution: (u32, u32)) {
         if resolution.0 > 0 && resolution.1 > 0 {
             self.config.width = resolution.0;
             self.config.height = resolution.1;
             self.surface.configure(&self.device, &self.config);
             self.render_destination.change_dimension(&self.device, (self.config.width, self.config.height));
             self.render_source.change_dimension(&self.device, (self.config.width, self.config.height));
-            
         }
-        // TODO: use display_mode to do funny things
-
-        Ok(())
     }
 
     pub fn update_camera_constant(&mut self, constant: f32) {

@@ -4,14 +4,18 @@ mod command;
 mod control_panel;
 mod data_structures;
 mod gpu_handles;
+mod mesh;
 mod render_state;
 mod scenes;
-mod mesh;
 mod tools;
 
-use std::{path::Path, thread, time::Instant, sync::Arc};
+use std::{path::Path, sync::Arc, thread, time::Instant};
 
-use crate::{control_panel::ControlPanel, render_state::RenderState, scenes::{SceneDescriptor, get_scenes}};
+use crate::{
+    control_panel::ControlPanel,
+    render_state::RenderState,
+    scenes::{get_scenes, SceneDescriptor},
+};
 
 /*
 Boilerplate code from https://sotrh.github.io/learn-wgpu/
@@ -25,9 +29,10 @@ use tools::RenderStats;
 use wasm_bindgen::prelude::*;
 
 use winit::{
+    dpi::PhysicalSize,
     event::*,
     event_loop::{ControlFlow, EventLoop},
-    window::WindowId, dpi::PhysicalSize,
+    window::WindowId,
 };
 
 // Simple wrapper to handle different window ids.
@@ -85,34 +90,36 @@ fn main_thread(
                                                      // *control_flow = ControlFlow::Wait;
         match event {
             Event::WindowEvent { window_id, event } => match event {
-                WindowEvent::MouseInput { state, .. } => match state {
-                    // Always redraw the control panel when a button has been pressed
-                    // or released.
-                    ElementState::Pressed => {
-                        if window_selector.select_window(&window_id) == 0 {
-                            control_panel.redraw(
-                                transmitter,
-                                &mut gui_has_focus,
-                                &mut redraw_gui,
-                                &start_time,
-                                &gpu_handles.device,
-                                &gpu_handles.queue,
-                            );
+                WindowEvent::MouseInput { state, .. } => {
+                    match state {
+                        // Always redraw the control panel when a button has been pressed
+                        // or released.
+                        ElementState::Pressed => {
+                            if window_selector.select_window(&window_id) == 0 {
+                                control_panel.redraw(
+                                    transmitter,
+                                    &mut gui_has_focus,
+                                    &mut redraw_gui,
+                                    &start_time,
+                                    &gpu_handles.device,
+                                    &gpu_handles.queue,
+                                );
+                            }
+                        }
+                        ElementState::Released => {
+                            if window_selector.select_window(&window_id) == 0 {
+                                control_panel.redraw(
+                                    transmitter,
+                                    &mut gui_has_focus,
+                                    &mut redraw_gui,
+                                    &start_time,
+                                    &gpu_handles.device,
+                                    &gpu_handles.queue,
+                                );
+                            }
                         }
                     }
-                    ElementState::Released => {
-                        if window_selector.select_window(&window_id) == 0 {
-                            control_panel.redraw(
-                                transmitter,
-                                &mut gui_has_focus,
-                                &mut redraw_gui,
-                                &start_time,
-                                &gpu_handles.device,
-                                &gpu_handles.queue,
-                            );
-                        }
-                    }
-                },
+                }
 
                 // Redraw the control panel when the cursor moves on it.
                 // The render engine will always redraw anyway.
@@ -214,10 +221,8 @@ fn main_thread(
 }
 
 // Our render and control window sizes, and space between them.
-const RENDER_WINDOW_SIZE: winit::dpi::PhysicalSize<u32> =
-    winit::dpi::PhysicalSize::new(1420, 1080);
-const CONTROL_WINDOW_SIZE: winit::dpi::PhysicalSize<u32> =
-    winit::dpi::PhysicalSize::new(400, 1080);
+const RENDER_WINDOW_SIZE: winit::dpi::PhysicalSize<u32> = winit::dpi::PhysicalSize::new(1420, 1080);
+const CONTROL_WINDOW_SIZE: winit::dpi::PhysicalSize<u32> = winit::dpi::PhysicalSize::new(400, 1080);
 const WINDOW_PADDING: u32 = 16;
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
@@ -265,7 +270,7 @@ pub async fn run() {
         &event_loop,
         CONTROL_WINDOW_SIZE,
         WINDOW_PADDING,
-        scenes.clone()
+        scenes.clone(),
     );
 
     let render_state_window = winit::window::WindowBuilder::new()
@@ -306,11 +311,14 @@ pub async fn run() {
     );
 }
 
-fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>, scenes: Arc<[SceneDescriptor]>) {
-    let mut command_count = 0;
-    let max_commands = 500;
+fn rendering_thread(
+    render_state: &mut RenderState,
+    receiver: Receiver<Command>,
+    scenes: Arc<[SceneDescriptor]>,
+) {
     let mut should_render = true;
     let mut render_stats = RenderStats::new();
+
     loop {
         if should_render {
             render_stats.begin_capture();
@@ -343,8 +351,8 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>,
                 Ok(command) => {
                     render_state.input_alt(&command);
                     match command {
-                        Command::Resize { new_size: _ } => {
-                            
+                        Command::Resize { new_size } => {
+                            render_state.resize(new_size);
                         }
                         Command::KeyEvent {
                             key,
@@ -372,8 +380,7 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>,
                             should_render = value;
                         }
                         Command::SetCameraConstant { constant } => {
-                            render_state.
-                                update_camera_constant(constant);
+                            render_state.update_camera_constant(constant);
                         }
                         Command::SetSphereMaterial { material } => {
                             render_state
@@ -381,32 +388,34 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>,
                                 .update_sphere_selection(material as u32);
                         }
                         Command::SetOtherMaterial { material } => {
-                            render_state
-                                .uniform
-                                .update_other_selection(material as u32);
+                            render_state.uniform.update_other_selection(material as u32);
                         }
                         Command::SetPixelSubdivision { level } => {
-                            render_state
-                                .uniform
-                                .update_subdivision_level(level);
+                            render_state.uniform.update_subdivision_level(level);
                         }
-                        Command::SetTexture { use_texture, uv_scale } => {
+                        Command::SetTexture {
+                            use_texture,
+                            uv_scale,
+                        } => {
                             render_state.uniform.update_use_texture(use_texture as u32);
                             render_state.uniform.update_uv_scale(uv_scale);
                         }
-                        Command::SetResolution { resolution, display_mode } => {
-                            render_state.set_display_mode(resolution, display_mode).unwrap();
-                            let size = match display_mode {
+                        Command::SetResolution {
+                            resolution,
+                            display_mode,
+                        } => {
+                            let (new_window_size, new_resolution) = match display_mode {
                                 command::DisplayMode::Exact => {
-                                    PhysicalSize::new(resolution.0, resolution.1)
-                                },
-                                command::DisplayMode::Stretch => {
-                                    RENDER_WINDOW_SIZE
-                                },
+                                    (PhysicalSize::new(resolution.0, resolution.1), resolution)
+                                }
+                                command::DisplayMode::Stretch => (RENDER_WINDOW_SIZE, resolution),
                                 command::DisplayMode::FitAuto => {
-                                    let max_aspect_ratio = RENDER_WINDOW_SIZE.width as f32 / RENDER_WINDOW_SIZE.height as f32;
-                                    let current_aspect_ratio = resolution.0 as f32 / resolution.1 as f32;
-                                    let (width, height) = if current_aspect_ratio > max_aspect_ratio {
+                                    let max_aspect_ratio = RENDER_WINDOW_SIZE.width as f32
+                                        / RENDER_WINDOW_SIZE.height as f32;
+                                    let current_aspect_ratio =
+                                        resolution.0 as f32 / resolution.1 as f32;
+                                    let (width, height) = if current_aspect_ratio > max_aspect_ratio
+                                    {
                                         // wider, fix the size horizontally
                                         let width = RENDER_WINDOW_SIZE.width;
                                         let height = (width as f32 / current_aspect_ratio) as u32;
@@ -417,25 +426,27 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>,
                                         let width = (height as f32 * current_aspect_ratio) as u32;
                                         (width, height)
                                     };
-                                    PhysicalSize::new(width, height)
-                                },
+                                    (PhysicalSize::new(width, height), resolution)
+                                }
+                                command::DisplayMode::Window => {
+                                    let current_size = render_state.window().inner_size();
+                                    let resolution = (current_size.width, current_size.height);
+                                    (current_size, resolution)
+                                }
                             };
-                            render_state.window().set_inner_size(size);
-                            
+                            render_state
+                            .set_display_mode(new_resolution, display_mode)
+                            .unwrap();
+                            render_state.window().set_inner_size(new_window_size);
                         }
                         Command::LoadScene { idx } => match render_state.load_scene(&scenes[idx]) {
                             Ok(_) => {}
                             Err(err) => eprintln!("{err}"),
-                        }
+                        },
 
                         other => {
                             eprintln!("Detected and dropped command {other:?}");
                         }
-                    }
-                    command_count += 1;
-                    if command_count == max_commands {
-                        command_count = 0;
-                        break;
                     }
                 }
             }
