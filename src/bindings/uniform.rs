@@ -5,26 +5,38 @@ use wgpu::util::DeviceExt;
 
 #[repr(C, align(16))]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Uniform {
+struct Uniform {
+    /// World space camera position
     camera_pos: [f32; 3],
+    /// Camera constant (affects FOV)
     camera_constant: f32,
+    /// Camera focus point
     camera_look_at: [f32; 3],
+    /// Aspect ratio of the window (for Horz+ correction)
     aspect_ratio: f32,
+    /// Which way is "up"
     camera_up: [f32; 3],
+    /// selection 1 for branching
     selection1: u32,
+    /// selection 2 for branching
     selection2: u32,
+    /// requested pixel subdivision level
     subdivision_level: u32,
+    /// whether to use the texture
     use_texture: u32,
-    _padding0: [u32; 1],
+    /// Which iteration this frame is for ping pong rendering
+    iteration: u32,
+    /// uv scale for the texture
     uv_scale: [f32; 2],
-    //_padding0: [u32; 3],
+    /// resolution of the canvas for ping pong rendering
+    /// and random seeding
     canvas_resolution: [u32; 2],
 }
 
 pub const MAX_SUBDIVISION: u32 = 10;
 
 pub struct UniformGpu {
-    pub uniforms: Uniform,
+    uniforms: Uniform,
     buffer: wgpu::Buffer,
     jitter_buffer: wgpu::Buffer,
 }
@@ -58,20 +70,70 @@ impl UniformGpu {
         camera: Option<&Camera>,
         selection1: Option<u32>,
         selection2: Option<u32>,
+        _iteration: Option<u32>,
         canvas_resolution: Option<(u32, u32)>,
     ) {
         if let Some(camera) = camera {
-            self.uniforms.update_camera(camera);
+            self.update_camera(camera);
         };
         if let Some(selection1) = selection1 {
-            self.uniforms.update_sphere_selection(selection1);
+            self.update_sphere_selection(selection1);
         };
         if let Some(selection2) = selection2 {
-            self.uniforms.update_other_selection(selection2);
+            self.update_other_selection(selection2);
         };
         if let Some(canvas_resolution) = canvas_resolution {
-            self.uniforms.update_resolution(canvas_resolution);
+            self.update_resolution(canvas_resolution);
         };
+    }
+
+    pub fn increase_iteration(&mut self) {
+        self.uniforms.iteration += 1;
+    }
+
+    pub fn reset_iteration(&mut self) {
+        self.uniforms.iteration = 0;
+    }
+
+    pub fn update_camera(&mut self, camera: &Camera) {
+        self.uniforms.camera_pos = camera.eye.into();
+        self.uniforms.camera_look_at = camera.target.into();
+        self.uniforms.camera_up = camera.up.into();
+        self.uniforms.camera_constant = camera.constant;
+        self.uniforms.aspect_ratio = camera.aspect;
+    }
+
+    pub fn update_sphere_selection(&mut self, selection: u32) {
+        self.uniforms.selection1 = selection;
+    }
+
+    pub fn update_other_selection(&mut self, selection: u32) {
+        self.uniforms.selection2 = selection;
+    }
+
+    pub fn update_subdivision_level(&mut self, level: u32) {
+        if level <= MAX_SUBDIVISION {
+            self.uniforms.subdivision_level = level;
+        } else {
+            self.uniforms.subdivision_level = MAX_SUBDIVISION;
+            eprintln!("Attempted raise subdivision level above maximum");
+        }
+    }
+
+    pub fn update_use_texture(&mut self, use_texture: u32) {
+        self.uniforms.use_texture = use_texture;
+    }
+
+    pub fn update_uv_scale(&mut self, uv_scale: (f32, f32)) {
+        self.uniforms.uv_scale = uv_scale.into();
+    }
+
+    pub fn update_iteration(&mut self, iteration: u32) {
+        self.uniforms.iteration = iteration;
+    }
+
+    pub fn update_resolution(&mut self, resolution: (u32, u32)) {
+        self.uniforms.canvas_resolution = resolution.into()
     }
 }
 
@@ -88,46 +150,9 @@ impl Uniform {
             subdivision_level: 1,
             use_texture: 0,
             uv_scale: [1.0, 1.0],
-            _padding0: [0],
+            iteration: 0,
             canvas_resolution: [512, 512],
         }
-    }
-
-    pub fn update_camera(&mut self, camera: &Camera) {
-        self.camera_pos = camera.eye.into();
-        self.camera_look_at = camera.target.into();
-        self.camera_up = camera.up.into();
-        self.camera_constant = camera.constant;
-        self.aspect_ratio = camera.aspect;
-    }
-
-    pub fn update_sphere_selection(&mut self, selection: u32) {
-        self.selection1 = selection;
-    }
-
-    pub fn update_other_selection(&mut self, selection: u32) {
-        self.selection2 = selection;
-    }
-
-    pub fn update_subdivision_level(&mut self, level: u32) {
-        if level <= MAX_SUBDIVISION {
-            self.subdivision_level = level;
-        } else {
-            self.subdivision_level = MAX_SUBDIVISION;
-            eprintln!("Attempted raise subdivision level above maximum");
-        }
-    }
-
-    pub fn update_use_texture(&mut self, use_texture: u32) {
-        self.use_texture = use_texture;
-    }
-
-    pub fn update_uv_scale(&mut self, uv_scale: (f32, f32)) {
-        self.uv_scale = uv_scale.into();
-    }
-
-    pub fn update_resolution(&mut self, resolution: (u32, u32)) {
-        self.canvas_resolution = resolution.into()
     }
 }
 
@@ -194,7 +219,7 @@ impl Bindable for UniformGpu {
     selection2: u32,
     subdivision_level: u32,
     use_texture: u32,
-    _padding0: u32,
+    iteration: u32,
     uv_scale: vec2f,
     resolution: vec2f,
 };",

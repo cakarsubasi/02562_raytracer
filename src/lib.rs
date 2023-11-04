@@ -369,26 +369,27 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>,
                             should_render = value;
                         }
                         Command::SetCameraConstant { constant } => {
-                            render_state.camera.constant = constant;
+                            render_state.
+                                update_camera_constant(constant);
                         }
                         Command::SetSphereMaterial { material } => {
                             render_state
-                                .uniform.uniforms
+                                .uniform
                                 .update_sphere_selection(material as u32);
                         }
                         Command::SetOtherMaterial { material } => {
                             render_state
-                                .uniform.uniforms
+                                .uniform
                                 .update_other_selection(material as u32);
                         }
                         Command::SetPixelSubdivision { level } => {
                             render_state
-                                .uniform.uniforms
+                                .uniform
                                 .update_subdivision_level(level);
                         }
                         Command::SetTexture { use_texture, uv_scale } => {
-                            render_state.uniform.uniforms.update_use_texture(use_texture);
-                            render_state.uniform.uniforms.update_uv_scale(uv_scale);
+                            render_state.uniform.update_use_texture(use_texture);
+                            render_state.uniform.update_uv_scale(uv_scale);
                         }
                         Command::SetResolution { resolution, display_mode } => {
                             render_state.set_display_mode(resolution, display_mode).unwrap();

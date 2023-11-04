@@ -40,7 +40,7 @@ pub struct RenderState {
     render_pipeline_layout: wgpu::PipelineLayout,
     render_pipeline: wgpu::RenderPipeline,
     mesh_direct: MeshGpu,
-    pub camera: Camera,
+    camera: Camera,
     pub uniform: UniformGpu,
     texture: Texture,
     mesh_handle: Option<StorageMeshGpu>,
@@ -450,6 +450,7 @@ impl RenderState {
             Some(&self.camera),
             None,
             None,
+            None, // TODO
             Some((self.config.width, self.config.height)),
         );
         self.uniform.update_buffer(&self.queue);
@@ -553,5 +554,9 @@ impl RenderState {
         // TODO: use display_mode to do funny things
 
         Ok(())
+    }
+
+    pub fn update_camera_constant(&mut self, constant: f32) {
+        self.camera.constant = constant;
     }
 }

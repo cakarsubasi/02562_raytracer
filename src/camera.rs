@@ -4,7 +4,7 @@ use crate::command::Command;
 
 use cgmath::{Vector3, Point3};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Camera {
     pub eye: Point3<f32>,
     pub target: Point3<f32>,
