@@ -72,6 +72,22 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
 
     Arc::new([
         SceneDescriptor {
+            name: String::from("W2 E2"),
+            shader: PathBuf::from("res/shaders/w2e2.wgsl"),
+            model: None,
+            camera: basic_scene_camera.clone(),
+            res: (512, 512),
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("W2 E3"),
+            shader: PathBuf::from("res/shaders/w2e3.wgsl"),
+            model: None,
+            camera: basic_scene_camera.clone(),
+            res: (512, 512),
+            ..Default::default()
+        },
+        SceneDescriptor {
             name: String::from("W2 E4"),
             shader: PathBuf::from("res/shaders/w2e4.wgsl"),
             model: None,
@@ -114,37 +130,6 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
         SceneDescriptor {
             name: String::from("W3 E4"),
             shader: PathBuf::from("res/shaders/w3e4.wgsl"),
-            model: None,
-            camera: basic_scene_camera.clone(),
-            res: (512, 512),
-            ..Default::default()
-        },
-        //SceneDescriptor {
-        //    name: String::from("Default"),
-        //    shader: PathBuf::from("res/shaders/shader.wgsl"),
-        //    model: Some(cornell_box_path.clone()),
-        //    camera: cornell_box_camera.clone(),
-        //    res: (512, 512),
-        //    ..Default::default()
-        //},
-        //SceneDescriptor {
-        //    name: String::from("Worksheet 1"),
-        //    shader: PathBuf::from("res/shaders/worksheet1.wgsl"),
-        //    model: None,
-        //    camera: basic_scene_camera.clone(),
-        //    res: (512, 512),
-        //},
-        SceneDescriptor {
-            name: String::from("Worksheet 2"),
-            shader: PathBuf::from("res/shaders/worksheet2.wgsl"),
-            model: None,
-            camera: basic_scene_camera.clone(),
-            res: (512, 512),
-            ..Default::default()
-        },
-        SceneDescriptor {
-            name: String::from("Worksheet 3"),
-            shader: PathBuf::from("res/shaders/worksheet3.wgsl"),
             model: None,
             camera: basic_scene_camera.clone(),
             res: (512, 512),

@@ -7,10 +7,7 @@ const BACKGROUND_COLOR: vec3f = vec3f(0.0, 0.0, 0.5);
 
 alias ShaderType = u32;
 const SHADER_TYPE_LAMBERTIAN: u32 = 0u;
-const SHADER_TYPE_PHONG: u32 = 1u;
 const SHADER_TYPE_MIRROR: u32 = 2u;
-const SHADER_TYPE_TRANSMIT: u32 = 3u;
-const SHADER_TYPE_GLOSSY: u32 = 4u;
 const SHADER_TYPE_NORMAL: u32 = 5u;
 const SHADER_TYPE_BASECOLOR: u32 = 6u;
 const SHADER_TYPE_NO_RENDER: u32 = 255u;
@@ -85,18 +82,12 @@ struct HitRecord {
 struct Shader {
     shader: ShaderType,
     base_color: vec3f,
-    ior1_over_ior2: f32,
-    specular: f32,
-    shininess: f32,
 };
 
 fn shader_init(hit: ptr<function, HitRecord>, shader_type: ShaderType) -> Shader {
     return Shader(
         shader_type,
         vec3f(0.0),
-        1.0,
-        0.0,
-        0.0,
     );
 }
 
@@ -104,9 +95,6 @@ fn hit_record_init() -> HitRecord {
     let shader = Shader(
         SHADER_TYPE_NO_RENDER,
         vec3f(0.0),
-        1.0,
-        0.0,
-        0.0,
     );
     return HitRecord(
         false,
@@ -182,9 +170,6 @@ fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool
     var has_hit = false;
     var shader = shader_init(hit, SHADER_TYPE_LAMBERTIAN);
     shader.base_color = vec3f(0.4, 0.3, 0.2);
-    shader.specular = 0.1;
-    shader.shininess = 42.0;
-    shader.ior1_over_ior2 = 1.4;
 
     let arr = array<vec3f, 3>(vec3f(0.2, 0.1, 0.9), vec3f(-0.2, 0.1, -0.1), vec3f(-0.2, 0.1, 0.9));
     has_hit = has_hit || wrap_shader(intersect_triangle(r, hit, arr), hit, shader);
@@ -221,8 +206,6 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, normal:
 
     return true;
 }
-
-
 
 fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: array<vec3f, 3>) -> bool {
     let ray = *r;
@@ -310,18 +293,11 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
         case 0u: {
             color = lambertian(r, hit);
         }
-        case 1u: {
-            color = phong(r, hit);
-        }
+
         case 2u: {
             color = mirror(r, hit);
         }
-        case 3u: {
-            color = transmit(r, hit);
-        }
-        case 4u: {
-            color = glossy(r, hit);
-        }
+
         case 5u: {
             color = shade_normal(r, hit);
         }
@@ -346,7 +322,7 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 
     let blocked = intersect_scene(&ray, hit);
     let ambient = hit_record.shader.base_color;
-    var diffuse = hit_record.shader.base_color * light_diffuse_contribution(light, normal, hit_record.shader.specular);
+    var diffuse = hit_record.shader.base_color * light_diffuse_contribution(light, normal, 0.0);
 
     // ambient only
     if (blocked) {
@@ -370,29 +346,6 @@ fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
     return 0.9 * diffuse + 0.1 * ambient;
 } 
 
-fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    let hit_record = *hit;
-    let ray = *r;
-
-    let specular = hit_record.shader.specular;
-    let s = hit_record.shader.shininess;
-    let normal = hit_record.normal;
-
-    let w_i = ray.direction;
-    let w_o = normalize(uniforms.camera_pos - hit_record.position); // view direction
-    let w_r = reflect(-w_i, normal);
-
-    let light = sample_point_light(hit_record.position);
-    let light_dir = light.w_i;
-    let light_intensity = light.l_i;
-    let refl_dir = normalize(reflect(-light_dir, normal));
-
-    let coeff = specular * (s + 2.0) / (2.0 * PI);
-    let phong_total = pow(saturate(dot(w_o, refl_dir)), s);
-
-    return coeff * phong_total * vec3f(1.0);
-}
-
 fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
     var hit_record = *hit;
     
@@ -407,48 +360,6 @@ fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 
     return vec3f(0.0, 0.0, 0.0);
 
-}
-
-fn glossy(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    return phong(r, hit) + transmit(r, hit);
-}
-
-fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    var hit_record = *hit;
-    let ray = *r;
-    let w_i = -normalize(ray.direction);
-    let normal = normalize(hit_record.normal);
-    var out_normal = vec3f(0.0);
-
-    var ior = hit_record.shader.ior1_over_ior2;
-    // figure out if we are inside or outside
-    let cos_thet_i = dot(w_i, normal);
-    // normals point outward, so if this is positive
-    // we are inside the object
-    // and if this is negative, we are outside
-    if (cos_thet_i < 0.0) {
-        // outside
-        out_normal = -normal;
-    } else {
-        // inside
-        ior = 1.0 / ior;
-        out_normal = normal;
-    }
-
-    let cos_thet_t_2 = (1.0 - (ior*ior) * (1.0 - cos_thet_i * cos_thet_i));
-    if (cos_thet_t_2 < 0.0) {
-        return error_shader();
-    }
-    let tangent = ((normal * cos_thet_i - w_i));
-    
-    let w_t = ior * tangent - (out_normal * sqrt(cos_thet_t_2));
-    let orig = hit_record.position + w_t * ETA;
-
-    *r = ray_init(w_t, orig); 
-    hit_record.has_hit = false;
-
-    *hit = hit_record;
-    return vec3f(0.0, 0.0, 0.0);
 }
 
 fn shade_normal(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {

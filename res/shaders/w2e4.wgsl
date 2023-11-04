@@ -195,7 +195,7 @@ fn intersect_scene(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool
     shader.base_color = vec3f(0.1, 0.7, 0.0);
     shader.shader = uniforms.selection2;
 
-    has_hit = has_hit || wrap_shader(intersect_plane(r, hit, plane_onb, vec3f(0.0, 0.0, 0.0)), hit, shader);
+    has_hit = has_hit || wrap_shader(intersect_plane(r, hit, vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 0.0)), hit, shader);
     
     return has_hit;
 }
@@ -207,16 +207,8 @@ fn wrap_shader(has_hit: bool, hit: ptr<function, HitRecord>, shader: Shader) -> 
     return has_hit;
 }
 
-struct Onb {
-    tangent: vec3f,
-    binormal: vec3f,
-    normal: vec3f,
-};
-const plane_onb = Onb(vec3f(-1.0, 0.0, 0.0), vec3f(0.0, 0.0, 1.0), vec3f(0.0, 1.0, 0.0));
-
-fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, plane: Onb, position: vec3f) -> bool {
+fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, normal: vec3f, position: vec3f) -> bool {
     let ray = *r;
-    let normal = plane_onb.normal;
     let distance = dot((position - ray.origin), normal)/(dot(ray.direction, normal));
     if (distance < ray.tmin || distance > ray.tmax) {
         return false;
@@ -227,10 +219,6 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, plane: 
     (*hit).position = pos;
     (*hit).normal = normal;
 
-    let u = dot((pos - position), plane.tangent);
-    let v = dot((pos - position), plane.binormal);
-
-    (*hit).uv0 = vec2f(abs(u), abs(v));
     return true;
 }
 
