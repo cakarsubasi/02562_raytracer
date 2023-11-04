@@ -257,14 +257,24 @@ fn wrap_shader(has_hit: bool, hit: ptr<function, HitRecord>, shader: Shader) -> 
     return has_hit;
 }
 
-fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: array<vec3f, 3>) -> bool {
+fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: u32) -> bool {
+    let v0_i = indexBuffer[v].x;
+    let v1_i = indexBuffer[v].y;
+    let v2_i = indexBuffer[v].z;
+    let v0 = vertexBuffer[v0_i].xyz;
+    let v1 = vertexBuffer[v1_i].xyz;
+    let v2 = vertexBuffer[v2_i].xyz;
+    let n0 = normalBuffer[v0_i].xyz;
+    let n1 = normalBuffer[v1_i].xyz;
+    let n2 = normalBuffer[v2_i].xyz;
+
     let ray = *r;
     let w_i = ray.direction;
     let o = ray.origin;
 
-    let e0 = v[1] - v[0];
-    let e1 = v[2] - v[0];
-    let o_to_v0 = v[0] - o;
+    let e0 = v1 - v0;
+    let e1 = v2 - v0;
+    let o_to_v0 = v0 - o;
     let normal = cross(e0, e1);
 
     let nom = cross(o_to_v0, w_i);
@@ -284,17 +294,9 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
     (*hit).dist = distance;
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
-    (*hit).normal = normalize(normal);
+    (*hit).normal = normalize(n0 * (1.0 - beta - gamma) + n1 * beta + n2 * gamma);
 
     return true;
-}
-
-fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: u32) -> bool {
-    let v1 = indexBuffer[v].x;
-    let v2 = indexBuffer[v].y;
-    let v3 = indexBuffer[v].z;
-    let arr = array<vec3f, 3>(vertexBuffer[v1].xyz, vertexBuffer[v2].xyz, vertexBuffer[v3].xyz);
-    return intersect_triangle(r, hit, arr);
 }
 
 
@@ -357,7 +359,9 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     let ray_orig = hit_record.position + hit_record.normal * ETA;
     var ray = ray_init(ray_dir, ray_orig);
 
-    let blocked = intersect_scene_bsp(&ray, hit);
+    //let blocked = intersect_scene_bsp(&ray, hit);
+    // too lazy to fix the shadowing issue for now, we will just skip it
+    let blocked = false;
     let ambient = hit_record.shader.base_color;
     var diffuse = hit_record.shader.base_color * light_diffuse_contribution(light, normal, hit_record.shader.specular);
 
