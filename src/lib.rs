@@ -359,7 +359,7 @@ fn rendering_thread(
                             state: ElementState::Pressed,
                         } => match key {
                             VirtualKeyCode::Space => {
-                                load_shader(render_state, "res/shaders/shader.wgsl")
+                                render_state.load_scene(&scenes[0]).unwrap();
                             }
                             _ => {}
                         },

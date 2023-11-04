@@ -261,7 +261,7 @@ impl ControlPanel {
                     });
                     self.create_resolution_ui(ui, commands);
                     self.create_scene_selection_ui(ui, commands);
-                    self.create_path_ui(ui, commands, has_focus, redraw_gui);
+                    //self.create_path_ui(ui, commands, has_focus, redraw_gui);
                     self.create_basic_scene_ui(ui, commands);
                     self.create_texture_ui(ui, commands);
                     self.create_pixel_subdivision_ui(ui, commands);
@@ -443,7 +443,8 @@ impl ControlPanel {
                                 .send(Command::LoadScene {
                                     idx
                                 })
-                                .unwrap()
+                                .unwrap();
+                            self.force_send_all(commands);
                         }
                     }
                 })
