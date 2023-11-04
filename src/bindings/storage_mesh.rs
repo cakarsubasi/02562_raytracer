@@ -76,10 +76,10 @@ impl Bindable for GeometryGpu {
     }
 }
 
-pub struct GeometryGpuSplit {
-    pub vertex_buffer: wgpu::Buffer,
-    pub vertex_normal_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
+struct GeometryGpuSplit {
+    vertex_buffer: wgpu::Buffer,
+    vertex_normal_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
 }
 
 impl GeometryGpuSplit {
@@ -196,9 +196,9 @@ impl Bindable for GeometryGpuSplit {
     }
 }
 
-pub struct GeometryGpuCombined {
-    pub combined_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
+struct GeometryGpuCombined {
+    combined_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
 }
 
 #[repr(C)]
@@ -303,7 +303,7 @@ impl Bindable for GeometryGpuCombined {
     }
 }
 
-pub struct MaterialsGpu {
+struct MaterialsGpu {
 
 }
 impl MaterialsGpu {

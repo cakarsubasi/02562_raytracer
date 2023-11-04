@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::{
-    bindings::storage_mesh::{GeometryGpuCombined, GeometryGpuSplit, StorageMeshGpu},
+    bindings::storage_mesh::StorageMeshGpu,
     data_structures::{
         bbox::Bbox,
         bsp_tree::{AccObj, BspTree},
