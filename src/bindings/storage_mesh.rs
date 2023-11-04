@@ -302,6 +302,7 @@ impl Bindable for GeometryGpuCombined {
 
 struct MaterialsGpu {
     materials_buffer: wgpu::Buffer,
+    light_sources_buffer: wgpu::Buffer,
 }
 impl MaterialsGpu {
     fn new(device: &wgpu::Device, mesh: &Mesh) -> Self {
@@ -311,48 +312,106 @@ impl MaterialsGpu {
             contents: bytemuck::cast_slice(&materials_slice),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
         });
+
+        let mut light_sources = mesh
+            .indices
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, triangle)| {
+                mesh.materials.get(triangle.3 as usize).and_then(|mat| {
+                    if mat.emissive == 1 {
+                        Some(idx as u32)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        // the laziest possible solution to wgpu not supporting zero sized arrays
+        if light_sources.len() == 0 {
+            light_sources.push(u32::MAX);
+        }
+
+        let light_source_indices_slice = light_sources.as_slice();
+
+        let light_sources_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Light Source Indices Buffer"),
+            contents: bytemuck::cast_slice(&light_source_indices_slice),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+        });
+
         Self {
-            materials_buffer: materials_buffer,
+            materials_buffer,
+            light_sources_buffer,
         }
     }
 }
 
 impl Bindable for MaterialsGpu {
     fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
-        vec![wgpu::BindGroupLayoutEntry {
-            // materials
-            binding: 0,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                has_dynamic_offset: false,
-                min_binding_size: None,
+        vec![
+            wgpu::BindGroupLayoutEntry {
+                // materials
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
             },
-            count: None,
-        }]
+            wgpu::BindGroupLayoutEntry {
+                // materials
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ]
     }
 
     fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
-        vec![wgpu::BindGroupEntry {
-            binding: 0,
-            resource: self.materials_buffer.as_entire_binding(),
-        }]
+        vec![
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: self.materials_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: self.light_sources_buffer.as_entire_binding(),
+            },
+        ]
     }
 
     fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
-        let struct_def = "struct Material {
+        let material_struct_def = "struct Material {
             diffuse: vec4f,
             ambient: vec4f,
             specular: vec4f,
             emissive: u32,
         };";
 
-        vec![WgslBindDescriptor {
-            struct_def: Some(struct_def),
-            bind_type: Some("storage"),
-            var_name: "materials",
-            var_type: "array<Material>",
-            extra_code: None,
-        }]
+        vec![
+            WgslBindDescriptor {
+                struct_def: Some(material_struct_def),
+                bind_type: Some("storage"),
+                var_name: "materials",
+                var_type: "array<Material>",
+                extra_code: None,
+            },
+            WgslBindDescriptor {
+                struct_def: None,
+                bind_type: Some("storage"),
+                var_name: "lightIndices",
+                var_type: "array<u32>",
+                extra_code: None,
+            },
+        ]
     }
 }

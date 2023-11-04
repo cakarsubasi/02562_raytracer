@@ -63,7 +63,7 @@ impl RenderState {
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN | wgpu::Backends::BROWSER_WEBGPU,
+            backends: wgpu::Backends::VULKAN,
             dx12_shader_compiler: Default::default(),
         });
 
@@ -91,7 +91,11 @@ impl RenderState {
                     limits: if cfg!(target_arch = "wasm32") {
                         wgpu::Limits::downlevel_webgl2_defaults()
                     } else {
-                        wgpu::Limits::default()
+                        wgpu::Limits {
+                            // lol, lmao
+                            max_storage_buffers_per_shader_stage: 16,
+                            ..Default::default()
+                        }
                     },
                     label: None,
                 },

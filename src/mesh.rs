@@ -12,10 +12,10 @@ use crate::{
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct Material {
-    diffuse: Vec4f32,
-    ambient: Vec4f32,
-    specular: Vec4f32,
-    emissive: u32,
+    pub diffuse: Vec4f32,
+    pub ambient: Vec4f32,
+    pub specular: Vec4f32,
+    pub emissive: u32,
     _padding0: [u32; 3],
 }
 
