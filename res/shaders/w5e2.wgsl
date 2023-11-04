@@ -193,12 +193,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     for (var sample = 0u; sample < subdiv * subdiv; sample++) {
         var r = get_camera_ray(uv, sample);
         var hit = hit_record_init();
-        if (!intersect_min_max(&r)) {
-            result = bgcolor.rgb;
-            break;
-        } 
         for (var i = 0; i < max_depth; i++) {
-            if (intersect_scene_bsp(&r, &hit)) {
+            if (intersect_scene_loop(&r, &hit)) {
                 if (hit.shader.use_texture) {
                     textured = shade(&r, &hit);
                 } else {
@@ -231,18 +227,13 @@ fn texture_sample(hit: ptr<function, HitRecord>) -> vec3f {
     return textureSample(texture0, sampler0, uv0_scaled).xyz;
 }
 
-fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
-    var shader = shader_init(hit, SHADER_TYPE_LAMBERTIAN);
-    shader.base_color = vec3f(0.9);
-    let has_hit = wrap_shader(intersect_trimesh(r, hit), hit, shader);
-    return has_hit;
-}
-
 fn intersect_scene_loop(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
     var has_hit = false;
+    var shader = shader_init(hit, SHADER_TYPE_LAMBERTIAN);
+    shader.base_color = vec3f(0.9);
     let num_of_tris = arrayLength(&indexBuffer);
     for (var i = 0u; i < num_of_tris; i++) {
-        has_hit = has_hit || intersect_triangle_indexed(r, hit, i);
+        has_hit = has_hit || wrap_shader(intersect_triangle_indexed(r, hit, i), hit, shader);
     }
     return has_hit;
 }
@@ -357,7 +348,7 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     let ray_orig = hit_record.position + hit_record.normal * ETA;
     var ray = ray_init(ray_dir, ray_orig);
 
-    let blocked = intersect_scene_bsp(&ray, hit);
+    let blocked = intersect_scene_loop(&ray, hit);
     let ambient = hit_record.shader.base_color;
     var diffuse = hit_record.shader.base_color * light_diffuse_contribution(light, normal, hit_record.shader.specular);
 
