@@ -391,7 +391,7 @@ fn rendering_thread(render_state: &mut RenderState, receiver: Receiver<Command>,
                                 .update_subdivision_level(level);
                         }
                         Command::SetTexture { use_texture, uv_scale } => {
-                            render_state.uniform.update_use_texture(use_texture);
+                            render_state.uniform.update_use_texture(use_texture as u32);
                             render_state.uniform.update_uv_scale(uv_scale);
                         }
                         Command::SetResolution { resolution, display_mode } => {

@@ -19,7 +19,7 @@ use winit::{
 };
 
 use crate::{
-    command::{Command, DisplayMode, ShaderType},
+    command::{Command, DisplayMode, ShaderType, TextureUse},
     gpu_handles::GPUHandles,
     scenes::SceneDescriptor,
 };
@@ -40,7 +40,7 @@ pub struct ControlPanel {
     camera_constant: f32,
     sphere_material: ShaderType,
     other_material: ShaderType,
-    use_texture: bool,
+    use_texture: TextureUse,
     texture_uv_scale: (f32, f32),
     pixel_subdivision: u32,
     render_resolution: (u32, u32),
@@ -117,7 +117,7 @@ impl ControlPanel {
             other_material: ShaderType::Lambertian,
             scene_path: path,
             model_path: model,
-            use_texture: true,
+            use_texture: TextureUse::Default,
             texture_uv_scale: (0.2, 0.2),
             pixel_subdivision: 1,
             render_resolution: scenes[0].res,
@@ -464,12 +464,20 @@ impl ControlPanel {
                 .fixed_decimals(1)
                     .speed(0.1),
             );
-            let use_texture_box = ui.checkbox(&mut self.use_texture, "Use Texture");
+            //let use_texture_box = ui.checkbox(&mut self.use_texture, "Use Texture");
+            let texture_usage_combo_box = egui::ComboBox::from_label("Use Texture")
+            .selected_text(format!("{:?}", self.use_texture))
+            .show_ui(ui, |ui| {  
+                TextureUse::iter().map(|texture_usage| {
+                    let type_str: &'static str = texture_usage.into();
+                    ui.selectable_value(&mut self.use_texture, texture_usage, type_str).changed()
+            }).fold(false, |acc, elem| acc || elem)
+        }).inner.unwrap_or(false);
 
-            if use_texture_box.changed() || uv_x.changed() || uv_y.changed() {
+            if texture_usage_combo_box || uv_x.changed() || uv_y.changed() {
                 commands
                     .send(Command::SetTexture {
-                        use_texture: self.use_texture as u32,
+                        use_texture: self.use_texture,
                         uv_scale: self.texture_uv_scale,
                     })
                     .unwrap()
@@ -562,7 +570,7 @@ impl ControlPanel {
             Command::SetPixelSubdivision { level: self.pixel_subdivision  }
         ).unwrap();
         commands.send(
-            Command::SetTexture { use_texture: self.use_texture as u32, uv_scale: self.texture_uv_scale }
+            Command::SetTexture { use_texture: self.use_texture, uv_scale: self.texture_uv_scale }
         ).unwrap();
         commands.send(
             Command::SetResolution { resolution: self.render_resolution, display_mode: self.display_mode }
