@@ -263,6 +263,44 @@ impl RenderState {
         ))
     }
 
+    fn recreate_bind_groups(&mut self) {
+        
+        // generate bind group layouts
+        let mut layout_entries = Vec::new();
+        layout_entries.push(self.uniform.get_layout_entries());
+        layout_entries.push(self.texture.get_layout_entries());
+        if let Some(m) = &self.mesh_handle {
+            layout_entries.push(m.get_layout_entries())
+        }
+        if let Some(b) = &self.bsp_tree_handle {
+            layout_entries.push(b.get_layout_entries())
+        }
+        layout_entries.push(self.render_destination.get_layout_entries());
+
+        let bind_group_layouts = create_bind_group_layouts(&self.device, &mut layout_entries);
+
+        let mut bind_group_entries = Vec::new();
+        bind_group_entries.push(self.uniform.get_bind_group_entries());
+        bind_group_entries.push(self.texture.get_bind_group_entries());
+        if let Some(m) = &self.mesh_handle {
+            bind_group_entries.push(m.get_bind_group_entries())
+        }
+        if let Some(b) = &self.bsp_tree_handle {
+            bind_group_entries.push(b.get_bind_group_entries())
+        }
+        bind_group_entries.push(self.render_destination.get_bind_group_entries());
+
+        let mut bind_group_entries2 = bind_group_entries.into_iter().flatten().collect::<Vec<_>>();
+
+        self.bind_groups =
+            vec![create_bind_groups(&self.device, &mut bind_group_entries2, &bind_group_layouts)];
+
+        // create the render pipeline layout from bind group layouts
+        self.render_pipeline_layout =
+            Self::create_render_pipeline_layout(&self.device, &vec![bind_group_layouts]);
+
+    }
+
     fn create_shader_defs(
         uniform: &UniformGpu,
         texture: &Texture,
@@ -458,6 +496,9 @@ impl RenderState {
             Some((self.config.width, self.config.height)),
         );
         self.uniform.update_buffer(&self.queue);
+        self.render_destination.update_view();
+        self.render_source.update_view();
+        self.recreate_bind_groups();
     }
 
     pub fn render(&self) -> Result<(), wgpu::SurfaceError> {
@@ -472,7 +513,7 @@ impl RenderState {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
-
+        let source_view = self.render_source.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[
@@ -490,7 +531,7 @@ impl RenderState {
                     },
                 }),
                 Some(wgpu::RenderPassColorAttachment {
-                    view: &self.render_source.view,
+                    view: &source_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,

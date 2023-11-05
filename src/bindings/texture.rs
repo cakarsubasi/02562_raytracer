@@ -228,8 +228,10 @@ impl RenderDestination {
     }
 
     pub fn change_dimension(&mut self, device: &wgpu::Device, new_size: (u32, u32)) {
-        let (texture, view) = Self::build(device, new_size);
-        self.texture = texture;
+        let (new_texture, view) = Self::build(device, new_size);
+        let old_texture = std::mem::replace(&mut self.texture, new_texture);
+        //self.texture = texture;
+        drop(old_texture);
         self.view = view;
     }
 
@@ -251,6 +253,10 @@ impl RenderDestination {
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         return (texture, view)
+    }
+
+    pub fn update_view(&mut self) {
+        self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
     }
 }
 
@@ -326,5 +332,9 @@ impl RenderSource {
         let (texture, view) = Self::build(device, new_size);
         self.texture = texture;
         self.view = view;
+    }
+
+    pub fn update_view(&mut self) {
+        self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
     }
 }

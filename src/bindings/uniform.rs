@@ -175,7 +175,7 @@ impl BufferOwner for UniformGpu {
             &self.jitter_buffer,
             0,
             bytemuck::cast_slice(jitter_vec.as_slice()),
-        )
+        );
     }
 }
 
@@ -229,7 +229,7 @@ impl Bindable for UniformGpu {
     use_texture: u32,
     iteration: u32,
     uv_scale: vec2f,
-    resolution: vec2f,
+    resolution: vec2u,
 };",
         );
 
