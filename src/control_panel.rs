@@ -46,6 +46,7 @@ pub struct ControlPanel {
     render_resolution: (u32, u32),
     display_mode: DisplayMode,
     max_samples: u32,
+    progressive_enabled: bool,
     scene_path: String,
     model_path: String,
 }
@@ -123,6 +124,7 @@ impl ControlPanel {
             render_resolution: scenes[0].res,
             display_mode: DisplayMode::Exact,
             max_samples: 4096,
+            progressive_enabled: false,
             window_id,
             current_scene: scenes[0].name.clone(),
             scenes,
@@ -548,10 +550,13 @@ impl ControlPanel {
                     .speed(1),
             );
 
-            if samples.changed() {
+            let checkbox = ui.checkbox(&mut self.progressive_enabled, "Progressive");
+
+            if samples.changed() || checkbox.changed() {
                 commands
                 .send(Command::SetSamples {
-                    samples: self.max_samples
+                    samples: self.max_samples,
+                    enabled: self.progressive_enabled,
                 })
                 .unwrap();
             }

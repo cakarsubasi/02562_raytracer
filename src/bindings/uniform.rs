@@ -39,6 +39,7 @@ pub struct UniformGpu {
     uniforms: Uniform,
     buffer: wgpu::Buffer,
     jitter_buffer: wgpu::Buffer,
+    pub max_iterations: u32,
 }
 
 impl UniformGpu {
@@ -62,6 +63,7 @@ impl UniformGpu {
             buffer,
             jitter_buffer,
             uniforms,
+            max_iterations: 1,
         }
     }
 
@@ -87,12 +89,18 @@ impl UniformGpu {
         };
     }
 
+    // For ping pong rendering
     pub fn increase_iteration(&mut self) {
         self.uniforms.iteration += 1;
     }
 
     pub fn reset_iteration(&mut self) {
         self.uniforms.iteration = 0;
+    }
+
+    // For ping pong rendering
+    pub fn get_iteration(&self) -> u32 {
+        self.uniforms.iteration
     }
 
     pub fn update_camera(&mut self, camera: &Camera) {

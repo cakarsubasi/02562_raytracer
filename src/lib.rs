@@ -317,10 +317,14 @@ fn rendering_thread(
     scenes: Arc<[SceneDescriptor]>,
 ) {
     let mut should_render = true;
+    let mut progressive = false;
+
     let mut render_stats = RenderStats::new();
 
     loop {
-        if should_render {
+        let current_iter = render_state.uniform.get_iteration();
+        let max_iter = render_state.uniform.max_iterations;
+        if should_render && (progressive && current_iter < max_iter) || (should_render && !progressive) {
             render_stats.begin_capture();
             thread::scope(|s| {
                 s.spawn(|| {
@@ -336,6 +340,12 @@ fn rendering_thread(
                         Err(e) => eprintln!("{:?}", e),
                     }
                     render_stats.end_capture();
+
+                    if progressive {
+                        println!("Current iter: {}/{}", current_iter, max_iter);
+                        render_state.uniform.increase_iteration();
+                    }
+
                     if render_stats.total > std::time::Duration::from_secs(5) {
                         println!("{render_stats}");
                         render_stats.reset();
@@ -343,9 +353,10 @@ fn rendering_thread(
                 });
             });
         }
+
         render_state.update();
         loop {
-            match receiver.recv_timeout(std::time::Duration::from_millis(1)) {
+            match receiver.recv_timeout(std::time::Duration::from_millis(6)) {
                 Err(RecvTimeoutError::Timeout) => break,
                 Err(_err) => break,
                 Ok(command) => {
@@ -402,6 +413,7 @@ fn rendering_thread(
                         } => {
                             render_state.uniform.update_use_texture(use_texture as u32);
                             render_state.uniform.update_uv_scale(uv_scale);
+
                         }
                         Command::SetResolution {
                             resolution,
@@ -440,6 +452,7 @@ fn rendering_thread(
                             render_state
                             .set_display_mode(new_resolution, display_mode)
                             .unwrap();
+
                             render_state.window().set_inner_size(new_window_size);
                         }
                         Command::LoadScene { idx } => match render_state.load_scene(&scenes[idx]) {
@@ -450,9 +463,16 @@ fn rendering_thread(
                             }
                             Err(err) => eprintln!("{err}"),
                         },
-
-                        other => {
-                            eprintln!("Detected and dropped command {other:?}");
+                        Command::SetSamples { samples, enabled } => {
+                            progressive = enabled;
+                            if enabled {
+                                render_state.uniform.max_iterations = samples;
+                            } else {
+                                render_state.uniform.max_iterations = 2;
+                            }
+                        }
+                        _other => {
+                            eprintln!("Detected and dropped command {_other:?}");
                         }
                     }
                 }

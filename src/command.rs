@@ -11,7 +11,7 @@ pub enum Command {
     SetSphereMaterial { material: ShaderType },
     SetOtherMaterial { material: ShaderType },
     SetPixelSubdivision { level: u32 },
-    SetSamples { samples: u32 },
+    SetSamples { samples: u32, enabled: bool },
     SetTexture { use_texture: TextureUse, uv_scale: (f32, f32) },
     SetResolution { resolution: (u32, u32), display_mode: DisplayMode },
     KeyEvent {key: VirtualKeyCode, state: ElementState },

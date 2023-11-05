@@ -38,6 +38,11 @@ struct VertexOutput {
     @location(0) coords: vec2<f32>,
 };
 
+struct FragmentOutput {
+    @location(0) frame: vec4f,
+    @location(1) accum: vec4f,
+}
+
 struct Ray {
     direction: vec3f,
     origin: vec3f,
@@ -164,7 +169,7 @@ fn get_camera_ray(uv: vec2f, sample: u32) -> Ray {
 // Fragment shader
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main(in: VertexOutput) -> FragmentOutput {
     let bgcolor = vec4f(BACKGROUND_COLOR, 1.0);
     let max_depth = MAX_DEPTH;
     let uv = in.coords * 0.5;
@@ -191,22 +196,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let multiplier = 1.0 / f32(subdiv * subdiv);
     result = result * multiplier;
 
-    return vec4f(pow(result, vec3f(1.5/1.0)), bgcolor.a);
+    let output = FragmentOutput(
+        vec4f(pow(result, vec3f(1.5/1.0)), bgcolor.a),
+        vec4f(0.0),
+    );
+    return output;
 }
 
 fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
     var has_hit = false;
     var current = false;
-    current = intersect_sphere(r, hit, vec3f(420.0, 90.0, 370.0), 90.0);
-    if (current) {
-        (*hit).shader = SHADER_TYPE_MIRROR;
-    }
-    has_hit = has_hit || current;
-    current = intersect_sphere(r, hit, vec3f(130.0, 90.0, 250.0), 90.0);
-    if (current) {
-        (*hit).shader = SHADER_TYPE_GLOSSY;
-        (*hit).ior1_over_ior2 = 1.5;
-    }
     has_hit = has_hit || current;
     current = intersect_trimesh(r, hit);
     if (current) {
