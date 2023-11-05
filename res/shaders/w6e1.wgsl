@@ -1,5 +1,3 @@
-// Vertex shader
-
 const PI = 3.14159265359;
 const ETA = 0.00001;
 
@@ -24,11 +22,6 @@ const MAX_DEPTH: i32 = 10;
 //@group(0) @binding(2)
 //var<storage> jitter: array<vec2f>;
 
-//@group(1) @binding(0)
-//var sampler0: sampler;
-//@group(1) @binding(1)
-//var texture0: texture_2d<f32>;
-
 // GPU will always align to 16, so this does not waste space
 //@group(2) @binding(0)
 //var<storage> vertexBuffer: array<vec4f>;
@@ -45,11 +38,6 @@ struct VertexOutput {
     @location(0) coords: vec2<f32>,
 };
 
-struct FragmentOutput {
-    @location(0) frame: vec4f,
-    @location(1) accum: vec4f,
-}
-
 struct Ray {
     direction: vec3f,
     origin: vec3f,
@@ -61,7 +49,7 @@ fn ray_init(direction: vec3f, origin: vec3f) -> Ray {
     return Ray(
         direction,
         origin,
-        5000.0,
+        100000.0,
         ETA,
     );
 }
@@ -103,38 +91,10 @@ struct HitRecord {
     uv0: vec2f,
     material: u32,
     // shader properties
-    shader: Shader,
-};
-
-struct Shader {
     shader: ShaderType,
-    use_texture: bool,
-    base_color: vec3f,
-    ior1_over_ior2: f32,
-    specular: f32,
-    shininess: f32,
 };
-
-fn shader_init(hit: ptr<function, HitRecord>, shader_type: ShaderType) -> Shader {
-    return Shader(
-        shader_type,
-        false,
-        vec3f(0.0),
-        1.0,
-        0.0,
-        0.0,
-    );
-}
 
 fn hit_record_init() -> HitRecord {
-    let shader = Shader(
-        SHADER_TYPE_NO_RENDER,
-        false,
-        vec3f(0.0),
-        1.0,
-        0.0,
-        0.0,
-    );
     return HitRecord(
         false,
         0,
@@ -147,7 +107,7 @@ fn hit_record_init() -> HitRecord {
         vec2f(0.0),
         0u,
         // shader properties
-        shader,
+        SHADER_TYPE_NO_RENDER,
     );
 }
 
@@ -198,7 +158,7 @@ fn get_camera_ray(uv: vec2f, sample: u32) -> Ray {
 // Fragment shader
 
 @fragment
-fn fs_main(in: VertexOutput) -> FragmentOutput {
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let bgcolor = vec4f(0.1, 0.3, 0.6, 1.0);
     let max_depth = MAX_DEPTH;
     let uv = in.coords * 0.5;
@@ -216,17 +176,12 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         } 
         for (var i = 0; i < max_depth; i++) {
             if (intersect_scene_bsp(&r, &hit)) {
-                if (hit.shader.use_texture) {
-                    textured = shade(&r, &hit);
-                } else {
-                    result += shade(&r, &hit);
-                }
+                result += shade(&r, &hit);
             } else {
                 result += bgcolor.rgb; break;
             }
 
             if (hit.has_hit) {
-                result += textured * texture_sample(&hit);
                 break;
             }
         }
@@ -234,43 +189,12 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let multiplier = 1.0 / f32(subdiv * subdiv);
     result = result * multiplier;
 
-    let output = FragmentOutput(
-        vec4f(pow(result, vec3f(1.5/1.0)), bgcolor.a),
-        vec4f(0.0),
-    );
-    return output;
-}
-
-fn texture_sample(hit: ptr<function, HitRecord>) -> vec3f {
-    // Note that we are ignoring the potential alpha channel within the texture here
-    // TODO: Might want to multiply alpha here
-    var uv0_scaled = fract((*hit).uv0 * uniforms.uv_scale);
-
-    return textureSample(texture0, sampler0, uv0_scaled).xyz;
+    return vec4f(pow(result, vec3f(1.5/1.0)), bgcolor.a);
 }
 
 fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
-    var shader = shader_init(hit, SHADER_TYPE_LAMBERTIAN);
-    let has_hit = wrap_shader(intersect_trimesh(r, hit), hit, shader);
-    return has_hit;
-}
-
-fn intersect_scene_loop(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
-    var has_hit = false;
-    let num_of_tris = arrayLength(&indexBuffer);
-    for (var i = 0u; i < num_of_tris; i++) {
-        has_hit = has_hit || intersect_triangle_indexed(r, hit, i);
-    }
-    return has_hit;
-}
-
-fn wrap_shader(has_hit: bool, hit: ptr<function, HitRecord>, shader: Shader) -> bool {
-    if (has_hit) {
-        (*hit).shader = shader;
-        if (shader.use_texture) {
-            (*hit).shader.base_color = vec3f(1.0);
-        }
-    }
+    (*hit).shader = uniforms.selection1;
+    let has_hit = intersect_trimesh(r, hit);
     return has_hit;
 }
 
@@ -282,7 +206,9 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
     let v0 = vertexBuffer[v0_i].xyz;
     let v1 = vertexBuffer[v1_i].xyz;
     let v2 = vertexBuffer[v2_i].xyz;
-
+    let n0 = normalBuffer[v0_i].xyz;
+    let n1 = normalBuffer[v1_i].xyz; 
+    let n2 = normalBuffer[v2_i].xyz;
 
     let ray = *r;
     let w_i = ray.direction;
@@ -295,13 +221,9 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
 
     let nom = cross(o_to_v0, w_i);
     var denom = dot(w_i, normal);
-    if (abs(denom) < 1e-6) {
+    if (abs(denom) < 1e-10) {
         return false;
     }
-
-    let n0 = normal;//normalBuffer[v0_i].xyz;
-    let n1 = normal;//normalBuffer[v1_i].xyz;
-    let n2 = normal;//normalBuffer[v2_i].xyz;
 
     let beta = dot(nom, e1) / (denom);
     let gamma = -dot(nom, e0) / (denom);
@@ -320,39 +242,16 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
     return true;
 }
 
-
-
-fn sample_directional_light(pos: vec3f) -> Light {
+fn sample_directional_light(pos: vec3f, idx: u32) -> Light {
     // a directional light is much like a point light, but the intensity
     // is independent of the distance
     let light_direction = -normalize(vec3f(-1.0));
     let light_intensity = 5.0 * vec3f(PI, PI, PI);
-    let distance = 1.0e+10;
+    let distance = 1.0;
     var light = light_init();
     light.l_i = light_intensity;
     light.dist = distance;
     light.w_i = light_direction;
-    return light;
-}
-
-fn sample_area_light(pos: vec3f, idx: u32) -> Light {
-    let light_tri_idx: u32 = lightIndices[idx];
-    let light_triangle: vec4u = indexBuffer[light_tri_idx];
-    let v0 = vertexBuffer[light_triangle.x].xyz;
-    let v1 = vertexBuffer[light_triangle.y].xyz;
-    let v2 = vertexBuffer[light_triangle.z].xyz;
-    let area = triangle_area(v0, v1, v2);
-    let light_mat = materials[light_triangle.w];
-    let l_e = light_mat.ambient.xyz;
-    let center = (v0 + v1 + v2) / 3.0;
-
-    let light_direction = center - pos;
-    let distance = sqrt(dot(light_direction, light_direction));
-    let light_intensity = l_e * area;
-    var light = light_init();
-    light.l_i = light_intensity;
-    light.w_i = normalize(light_direction);
-    light.dist = distance;
     return light;
 }
 
@@ -363,22 +262,15 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     hit_record.depth += 1;
     *hit = hit_record;
 
-    switch(hit_record.shader.shader) {
+    switch(hit_record.shader) {
         case 0u: {
             color = lambertian(r, hit);
         }
-        case 1u: {
-            color = phong(r, hit);
-        }
+
         case 2u: {
             color = mirror(r, hit);
         }
-        case 3u: {
-            color = transmit(r, hit);
-        }
-        case 4u: {
-            color = glossy(r, hit);
-        }
+
         case 5u: {
             color = shade_normal(r, hit);
         }
@@ -402,24 +294,13 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 
     let light_tris = arrayLength(&lightIndices);
     for (var idx = 0u; idx < light_tris; idx++) {
-        let light = sample_area_light(hit_record.position, idx);
-
-        //let ray_dir = light.w_i;
-        //let ray_orig = hit_record.position + hit_record.normal * ETA;
-        //var ray = ray_init(ray_dir, ray_orig);
-
-        //let blocked = intersect_scene_bsp(&ray, hit);
-        // too lazy to fix the shadowing issue for now, we will just skip it
+        let light = sample_directional_light(hit_record.position, idx);
 
         diffuse = diffuse + bdrf * light_diffuse_contribution(light, normal);
+        break;
     }
     let blocked = false;
     let ambient = material.ambient.rgb;
-
-    // ambient only
-    //if (blocked) {
-    //    return ambient * 0.1;
-    //}
 
     return diffuse_and_ambient(diffuse, ambient);
 }
@@ -435,30 +316,6 @@ fn light_diffuse_contribution(light: Light, normal: vec3f) -> vec3f {
 fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
     return 0.9 * diffuse + 0.1 * ambient;
 } 
-
-fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    let hit_record = *hit;
-    let ray = *r;
-
-    let specular = hit_record.shader.specular;
-    let s = hit_record.shader.shininess;
-    let normal = hit_record.normal;
-
-    let w_i = ray.direction;
-    let w_o = normalize(uniforms.camera_pos - hit_record.position); // view direction
-    let w_r = reflect(-w_i, normal);
-
-    let light = sample_directional_light(hit_record.position);
-    let light_dir = light.w_i;
-    let light_intensity = light.l_i;
-    let refl_dir = normalize(reflect(-light_dir, normal));
-
-    let coeff = specular * (s + 2.0) / (2.0 * PI);
-    let phong_total = pow(saturate(dot(w_o, refl_dir)), s);
-
-    return coeff * phong_total * vec3f(1.0);
-}
-
 
 fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
     var hit_record = *hit;
@@ -476,47 +333,6 @@ fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 
 }
 
-fn glossy(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    return phong(r, hit) + transmit(r, hit);
-}
-
-fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    var hit_record = *hit;
-    let ray = *r;
-    let w_i = -normalize(ray.direction);
-    let normal = normalize(hit_record.normal);
-    var out_normal = vec3f(0.0);
-
-    var ior = hit_record.shader.ior1_over_ior2;
-    // figure out if we are inside or outside
-    let cos_thet_i = dot(w_i, normal);
-    // normals point outward, so if this is positive
-    // we are inside the object
-    // and if this is negative, we are outside
-    if (cos_thet_i < 0.0) {
-        // outside
-        out_normal = -normal;
-    } else {
-        // inside
-        ior = 1.0 / ior;
-        out_normal = normal;
-    }
-
-    let cos_thet_t_2 = (1.0 - (ior*ior) * (1.0 - cos_thet_i * cos_thet_i));
-    if (cos_thet_t_2 < 0.0) {
-        return error_shader();
-    }
-    let tangent = ((normal * cos_thet_i - w_i));
-    
-    let w_t = ior * tangent - (out_normal * sqrt(cos_thet_t_2));
-    let orig = hit_record.position + w_t * ETA;
-
-    *r = ray_init(w_t, orig); 
-    hit_record.has_hit = false;
-
-    *hit = hit_record;
-    return vec3f(0.0, 0.0, 0.0);
-}
 
 fn shade_normal(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     return ((*hit).normal + 1.0) * 0.5;

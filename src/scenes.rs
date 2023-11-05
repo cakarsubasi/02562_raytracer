@@ -65,10 +65,21 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
         ..Default::default()
     };
 
+    let dragon_camera = Camera {
+        eye: (-0.02, 0.11, 0.6).into(),
+        target: (-0.02, 0.11, 0.0).into(),
+        up: (0.0, 1.0, 0.0).into(),
+        constant: 3.5,
+        ..Default::default()
+    };
+
+    
+
     let cornell_box_path = PathBuf::from("res/models/CornellBox.obj");
     let cornell_box_with_blocks_path = PathBuf::from("res/models/CornellBoxWithBlocks.obj");
     let bunny_path = PathBuf::from("res/models/bunny.obj");
     let teapot_path = PathBuf::from("res/models/teapot.obj");
+    let dragon_path = PathBuf::from("res/models/dragon.obj");
 
     Arc::new([
         SceneDescriptor {
@@ -210,7 +221,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
         SceneDescriptor {
             name: String::from("W5 E4 Cornell Box"),
             shader: PathBuf::from("res/shaders/w5e4.wgsl"),
-            model: Some(cornell_box_path.clone()),
+            model: Some(cornell_box_with_blocks_path.clone()),
             camera: cornell_box_camera.clone(),
             res: (512, 512),
             ..Default::default()
@@ -218,9 +229,17 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
         SceneDescriptor {
             name: String::from("W5 E5 Cornell Box"),
             shader: PathBuf::from("res/shaders/w5e5.wgsl"),
-            model: Some(cornell_box_path.clone()),
+            model: Some(cornell_box_with_blocks_path.clone()),
             camera: cornell_box_camera.clone(),
             res: (512, 512),
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("W6 E1 Teapot"),
+            shader: PathBuf::from("res/shaders/w6e1.wgsl"),
+            model: Some(teapot_path.clone()),
+            camera: utah_teapot_camera.clone(),
+            res: (800, 450),
             ..Default::default()
         },
         SceneDescriptor {
@@ -229,6 +248,14 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             model: Some(bunny_path.clone()),
             camera: bunny_camera.clone(),
             res: (512, 512),
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("W6 E1 Dragon"),
+            shader: PathBuf::from("res/shaders/w6e1.wgsl"),
+            model: Some(dragon_path.clone()),
+            camera: dragon_camera.clone(),
+            res: (800, 450),
             ..Default::default()
         },
         SceneDescriptor {

@@ -443,7 +443,11 @@ fn rendering_thread(
                             render_state.window().set_inner_size(new_window_size);
                         }
                         Command::LoadScene { idx } => match render_state.load_scene(&scenes[idx]) {
-                            Ok(_) => {eprintln!("Successfully loaded new scene: {:?}", scenes[idx])}
+                            Ok(_) => 
+                            {
+                                render_stats.reset();
+                                eprintln!("Successfully loaded new scene: {:?}", scenes[idx])
+                            }
                             Err(err) => eprintln!("{err}"),
                         },
 

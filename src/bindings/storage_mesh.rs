@@ -327,11 +327,9 @@ impl MaterialsGpu {
                 })
             })
             .collect::<Vec<_>>();
-
+        
         // the laziest possible solution to wgpu not supporting zero sized arrays
-        if light_sources.len() == 0 {
-            light_sources.push(u32::MAX);
-        }
+        light_sources.insert(0, u32::MAX);
 
         let light_source_indices_slice = light_sources.as_slice();
 
