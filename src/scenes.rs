@@ -269,7 +269,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
         SceneDescriptor {
             name: String::from("W6 E3 Cornell Box"),
             shader: PathBuf::from("res/shaders/w6e3.wgsl"),
-            model: Some(cornell_box_with_blocks_path.clone()),
+            model: Some(cornell_box_path.clone()),
             camera: cornell_box_camera.clone(),
             res: (512, 512),
             vertex_type: VertexType::Combined,

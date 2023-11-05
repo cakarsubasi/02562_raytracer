@@ -427,6 +427,26 @@ fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
     return 0.9 * diffuse + 0.1 * ambient;
 } 
 
+fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
+    var hit_record = *hit;
+    
+    let normal = hit_record.normal;
+    let ray_dir = reflect((*r).direction, normal);
+    let ray_orig = hit_record.position + normal * ETA;
+    *r = ray_init(ray_dir, ray_orig);
+
+    hit_record.has_hit = false;
+
+    *hit = hit_record;
+
+    return vec3f(0.0, 0.0, 0.0);
+
+}
+
+fn glossy(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
+    return phong(r, hit) + transmit(r, hit);
+}
+
 fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
     let hit_record = *hit;
     let ray = *r;
@@ -448,26 +468,6 @@ fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     let phong_total = pow(saturate(dot(w_o, refl_dir)), s);
 
     return coeff * phong_total * vec3f(1.0);
-}
-
-fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    var hit_record = *hit;
-    
-    let normal = hit_record.normal;
-    let ray_dir = reflect((*r).direction, normal);
-    let ray_orig = hit_record.position + normal * ETA;
-    *r = ray_init(ray_dir, ray_orig);
-
-    hit_record.has_hit = false;
-
-    *hit = hit_record;
-
-    return vec3f(0.0, 0.0, 0.0);
-
-}
-
-fn glossy(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    return phong(r, hit) + transmit(r, hit);
 }
 
 fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
