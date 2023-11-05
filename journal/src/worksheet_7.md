@@ -3,11 +3,11 @@
 
 # 1 - Ping Pong Rendering
 
-Not done.
+Done. Badly.
 
 # 2 - Soft Shadows
 
-Not done.
+Done but kinda brooken.
 
 # 3 - Indirect Illumination
 
