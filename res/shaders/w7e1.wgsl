@@ -137,6 +137,34 @@ fn triangle_area(v0: vec3f, v1: vec3f, v2: vec3f) -> f32 {
     return 0.5 * sqrt(dot(cr, cr));
 }
 
+// PRNG xorshift seed generator by NVIDIA
+fn prng_xorshift_seed_generator(val0: u32, val1: u32) -> u32 {
+      let N = 16u; // User specified number of iterations
+      var v0: u32 = val0;
+      var v1: u32 = val1;
+      var s0: u32 = 0u;
+
+      for(var n = 0u; n < N; n++) {
+        s0 += 0x9e3779b9u;
+        v0 += ((v1<<4u)+0xa341316cu)^(v1+s0)^((v1>>5u)+0xc8013ea4u);
+        v1 += ((v0<<4u)+0xad90777du)^(v0+s0)^((v0>>5u)+0x7e95761eu);
+      }
+
+      return v0;
+}
+
+ // Generate random unsigned int in [0, 2^31)
+ fn mcg31(prev: ptr<function, u32>) -> u32 {
+    let LCG_A = 1977654935u; // Multiplier from Hui-Ching Tang [EJOR 2007]
+    *prev = (LCG_A * (*prev)) & 0x7FFFFFFFu;
+    return *prev;
+}
+// Generate random float in [0, 1)
+fn rnd(prev: ptr<function, u32>) -> f32
+{
+    return f32(mcg31(prev)) / f32(0x80000000u);
+}
+
 @vertex
 fn vs_main(
     model: VertexInput,
@@ -147,7 +175,7 @@ fn vs_main(
     return out;
 }
 
-fn get_camera_ray(uv: vec2f, sample: u32) -> Ray {
+fn get_camera_ray(uv: vec2f, jitter: vec2f) -> Ray {
     let e = uniforms.camera_pos;
     let p = uniforms.camera_look_at;
     let u = uniforms.camera_up;
@@ -158,8 +186,8 @@ fn get_camera_ray(uv: vec2f, sample: u32) -> Ray {
     let b1 = normalize(cross(v, u));
     let b2 = cross(b1, v);
 
-    let j_x = jitter[sample].x;
-    let j_y = jitter[sample].y;
+    let j_x = jitter.x;
+    let j_y = jitter.y;
     let q = normalize(b1 * (uv.x + j_x) * aspect + b2 * (uv.y + j_y) + v*d);
 
     let ray = ray_init(q, e);
@@ -173,32 +201,37 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let bgcolor = vec4f(BACKGROUND_COLOR, 1.0);
     let max_depth = MAX_DEPTH;
     let uv = in.coords * 0.5;
-    let subdiv = uniforms.subdivision_level;
+
+    let coord_y: u32 = u32(in.clip_position.y);
+    let coord_x: u32 = u32(in.clip_position.x);
+    let res_x: u32 = uniforms.resolution.x;
+    let launch_idx = coord_y*uniforms.resolution.x + coord_x;
+    var t = prng_xorshift_seed_generator(launch_idx, uniforms.iteration);
+    let jitter = vec2f(rnd(&t), rnd(&t))/f32(uniforms.resolution.y);
     
     var result = vec3f(0.0);
-    var textured = vec3f(0.0);
     // each loop is one bounce
-    for (var sample = 0u; sample < subdiv * subdiv; sample++) {
-        var r = get_camera_ray(uv, sample);
-        var hit = hit_record_init();
-        for (var i = 0; i < max_depth; i++) {
-            if (intersect_scene_bsp(&r, &hit)) {
-                result += shade(&r, &hit);
-            } else {
-                result += bgcolor.rgb; break;
-            }
+    var r = get_camera_ray(uv, jitter);
+    var hit = hit_record_init();
+    for (var i = 0; i < max_depth; i++) {
+        if (intersect_scene_bsp(&r, &hit)) {
+            result += shade(&r, &hit);
+        } else {
+            result += bgcolor.rgb; break;
+        }
 
-            if (hit.has_hit) {
-                break;
-            }
+        if (hit.has_hit) {
+            break;
         }
     }
-    let multiplier = 1.0 / f32(subdiv * subdiv);
-    result = result * multiplier;
+    
+    //let multiplier = 1.0 / f32(subdiv * subdiv);
+    let curr_sum = textureLoad(renderTexture, vec2u(in.clip_position.xy), 0).rgb*f32(uniforms.iteration);
+    let accum_color = (result + curr_sum)/f32(uniforms.iteration + 1u);
 
     let output = FragmentOutput(
-        vec4f(pow(result, vec3f(1.5/1.0)), bgcolor.a),
-        vec4f(0.0),
+        vec4f(pow(accum_color, vec3f(1.0/1.0)), bgcolor.a),
+        vec4f(accum_color, 1.0),
     );
     return output;
 }
