@@ -16,16 +16,16 @@ Directional lights are super simple as they are essentially point
 lights that are infinitely far away, this ends up simplifying much
 of the required math.
 
-Not done.
+Done.
 
 # 3. Vertex normals
 
-Not done.
+Done.
 
 # 4. Cornell Box
 
-Not done.
+Done.
 
 # 5. Emission
 
-Not done.
+Done.

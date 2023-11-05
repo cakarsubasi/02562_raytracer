@@ -33,22 +33,33 @@ Therefore the number of photons is approximately \\(1.25\times10^{19}\frac{1}{s}
 >
 >Use \\(W\\) for Watt, \\(J\\) for Joule, \\(m\\) for meter, \\(s\\) for second and \\(sr\\) for steradian
 
-Power: \\(P=IV\\)
+- Energy: \\(Q = P \times t\\)
 
-Energy: \\(E = \frac{dP}{dt}\\)
+- Radiant Flux (Power): \\(\Phi = \frac{dE}{dt} = IV\\)
 
-Radiant Flux: \\(\Phi = \frac{dE}{dt}\\)
+\\(2.4V \times 0.7A = 1.68 W = 1.68 J s^-1\\)
 
-Radiant Intensity: \\(I = \frac{d\Phi}{d\omega}\\) where \\(d\omega = \frac{dA^{\bot}}{r^2}\\) for a sphere.
+
+- Radiant Intensity: \\(I = \frac{d\Phi}{d\omega}\\) where \\(d\omega = \frac{dA^{\bot}}{r^2}\\) for a sphere.
+
+Integrating over an entire sphere: \\(\Omega = 4\pi r^2\\)
+
+1336 W/m^2
+
+\\(\\)
 
 Radiant Exitance: \\(M = \frac{d\Phi}{dA}\\)
 
 Emitted energy in 5 minutes: \\(P\times 300s\\)
 
+\\(1.68 \times 300 = )
+
 # Part 3
 
 > The light bulb from above is observed by an eye, which has an opening of the pupil of 6 mm and a distance
 of 1 m from the light bulb. Find the irradiance received in the eye.
+
+We will make multiple approximations.
 
 # Part 4
 

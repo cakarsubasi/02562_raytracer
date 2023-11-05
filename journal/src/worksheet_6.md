@@ -7,8 +7,8 @@ Done. Need screenshots.
 
 # 2. Merge material index to face coordinates
 
-Not done
+Done.
 
 # 3. Cornell Box
 
-Not done.
+Done.
