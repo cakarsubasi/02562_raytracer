@@ -155,6 +155,17 @@ fn set_material(hit: ptr<function, HitRecord>, index: u32) {
     (*hit).material = index;
 }
 
+fn get_material(hit: ptr<function, HitRecord>) -> Material {
+    return materials[(*hit).material];
+}
+
+fn triangle_area(v0: vec3f, v1: vec3f, v2: vec3f) -> f32 {
+    let e0 = v0 - v1;
+    let e1 = v0 - v2;
+    let cr = cross(e0, e1);
+    return 0.5 * sqrt(dot(cr, cr));
+}
+
 @vertex
 fn vs_main(
     model: VertexInput,
@@ -222,6 +233,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     }
     let multiplier = 1.0 / f32(subdiv * subdiv);
     result = result * multiplier;
+
     let output = FragmentOutput(
         vec4f(pow(result, vec3f(1.5/1.0)), bgcolor.a),
         vec4f(0.0),
@@ -238,7 +250,7 @@ fn texture_sample(hit: ptr<function, HitRecord>) -> vec3f {
 }
 
 fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
-    var shader = shader_init(hit, SHADER_TYPE_BASECOLOR);
+    var shader = shader_init(hit, SHADER_TYPE_LAMBERTIAN);
     let has_hit = wrap_shader(intersect_trimesh(r, hit), hit, shader);
     return has_hit;
 }
@@ -270,9 +282,7 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
     let v0 = vertexBuffer[v0_i].xyz;
     let v1 = vertexBuffer[v1_i].xyz;
     let v2 = vertexBuffer[v2_i].xyz;
-    let n0 = normalBuffer[v0_i].xyz;
-    let n1 = normalBuffer[v1_i].xyz;
-    let n2 = normalBuffer[v2_i].xyz;
+
 
     let ray = *r;
     let w_i = ray.direction;
@@ -288,6 +298,10 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
     if (abs(denom) < 1e-6) {
         return false;
     }
+
+    let n0 = normal;//normalBuffer[v0_i].xyz;
+    let n1 = normal;//normalBuffer[v1_i].xyz;
+    let n2 = normal;//normalBuffer[v2_i].xyz;
 
     let beta = dot(nom, e1) / (denom);
     let gamma = -dot(nom, e0) / (denom);
@@ -318,6 +332,27 @@ fn sample_directional_light(pos: vec3f) -> Light {
     light.l_i = light_intensity;
     light.dist = distance;
     light.w_i = light_direction;
+    return light;
+}
+
+fn sample_area_light(pos: vec3f, idx: u32) -> Light {
+    let light_tri_idx: u32 = lightIndices[idx];
+    let light_triangle: vec4u = indexBuffer[light_tri_idx];
+    let v0 = vertexBuffer[light_triangle.x].xyz;
+    let v1 = vertexBuffer[light_triangle.y].xyz;
+    let v2 = vertexBuffer[light_triangle.z].xyz;
+    let area = triangle_area(v0, v1, v2);
+    let light_mat = materials[light_triangle.w];
+    let l_e = light_mat.ambient.xyz;
+    let center = (v0 + v1 + v2) / 3.0;
+
+    let light_direction = center - pos;
+    let distance = sqrt(dot(light_direction, light_direction));
+    let light_intensity = l_e * area;
+    var light = light_init();
+    light.l_i = light_intensity;
+    light.w_i = normalize(light_direction);
+    light.dist = distance;
     return light;
 }
 
@@ -359,34 +394,41 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 
 fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
     var hit_record = *hit;
-    let light = sample_directional_light(hit_record.position);
     let normal = hit_record.normal;
+    let material = get_material(hit);
+    let bdrf = material.diffuse.rgb;
+    
+    var diffuse = vec3f(0.0);
 
-    let ray_dir = light.w_i;
-    let ray_orig = hit_record.position + hit_record.normal * ETA;
-    var ray = ray_init(ray_dir, ray_orig);
+    let light_tris = arrayLength(&lightIndices);
+    for (var idx = 0u; idx < light_tris; idx++) {
+        let light = sample_area_light(hit_record.position, idx);
 
-    //let blocked = intersect_scene_bsp(&ray, hit);
-    // too lazy to fix the shadowing issue for now, we will just skip it
+        //let ray_dir = light.w_i;
+        //let ray_orig = hit_record.position + hit_record.normal * ETA;
+        //var ray = ray_init(ray_dir, ray_orig);
+
+        //let blocked = intersect_scene_bsp(&ray, hit);
+        // too lazy to fix the shadowing issue for now, we will just skip it
+
+        diffuse = diffuse + bdrf * light_diffuse_contribution(light, normal);
+    }
     let blocked = false;
-    let ambient = hit_record.shader.base_color;
-    var diffuse = hit_record.shader.base_color * light_diffuse_contribution(light, normal, hit_record.shader.specular);
+    let ambient = material.ambient.rgb;
 
     // ambient only
-    if (blocked) {
-        return ambient * 0.1;
-    } else { // ambient and diffuse
-        return diffuse_and_ambient(diffuse, ambient);
-    }
+    //if (blocked) {
+    //    return ambient * 0.1;
+    //}
 
     return diffuse_and_ambient(diffuse, ambient);
 }
 
-fn light_diffuse_contribution(light: Light, normal: vec3f, specular: f32) -> vec3f {
-    let one_minus_specular = 1.0 - specular;
+fn light_diffuse_contribution(light: Light, normal: vec3f) -> vec3f {
     var diffuse = vec3f(dot(normal, light.w_i));
+    diffuse = diffuse / (light.dist * light.dist);
     diffuse *= light.l_i;
-    diffuse *= one_minus_specular / PI;
+    diffuse = diffuse / PI;
     return diffuse;
 }
 
