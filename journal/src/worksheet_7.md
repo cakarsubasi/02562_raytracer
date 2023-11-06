@@ -1,14 +1,14 @@
 
 # Worksheet 7 - Progressive Path Tracing
 
-# 1 - Ping Pong Rendering
+# 1. Ping Pong Rendering
 
 Done. Badly.
 
-# 2 - Soft Shadows
+# 2. Soft Shadows
 
 Done but kinda brooken.
 
-# 3 - Indirect Illumination
+# 3. Indirect Illumination
 
 Not done.
