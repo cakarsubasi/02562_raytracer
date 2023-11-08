@@ -277,8 +277,8 @@ impl RenderState {
         .collect::<Vec<_>>()
     }
 
-    fn recreate_bind_groups(&mut self) -> (wgpu::PipelineLayout, Vec<wgpu::BindGroup>) {
-        Self::recreate_bind_groups_impl(&self.device, &self.get_handles())
+    fn recreate_bind_groups(&mut self) {
+        (self.render_pipeline_layout, self.bind_groups) = Self::recreate_bind_groups_impl(&self.device, &self.get_handles());
     }
 
     fn recreate_bind_groups_impl(
