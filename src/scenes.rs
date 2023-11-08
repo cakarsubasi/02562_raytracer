@@ -15,6 +15,7 @@ pub struct SceneDescriptor {
     pub shader: PathBuf,
     pub vertex_type: VertexType,
     pub model: Option<PathBuf>,
+    pub background_hdri: Option<PathBuf>,
     pub camera: Camera,
     pub res: (u32, u32),
 }
@@ -25,6 +26,7 @@ impl Default for SceneDescriptor {
             name: Default::default(),
             shader: Default::default(),
             vertex_type: Default::default(),
+            background_hdri: None,
             model: Default::default(),
             camera: Default::default(),
             res: (512, 512),
@@ -265,6 +267,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             camera: cornell_box_camera.clone(),
             res: (512, 512),
             vertex_type: VertexType::Combined,
+            ..Default::default()
         },
         SceneDescriptor {
             name: String::from("W6 E3 Cornell Box"),
@@ -273,6 +276,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             camera: cornell_box_camera.clone(),
             res: (512, 512),
             vertex_type: VertexType::Combined,
+            ..Default::default()
         },
         SceneDescriptor {
             name: String::from("W7 E1 Cornell Box"),
@@ -281,6 +285,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             camera: cornell_box_camera.clone(),
             res: (512, 512),
             vertex_type: VertexType::Combined,
+            ..Default::default()
         },
         SceneDescriptor {
             name: String::from("W7 E2 Cornell Box"),
@@ -289,6 +294,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             camera: cornell_box_camera.clone(),
             res: (512, 512),
             vertex_type: VertexType::Combined,
+            ..Default::default()
         },
         SceneDescriptor {
             name: String::from("W7 E3 Cornell Box"),
@@ -297,6 +303,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             camera: cornell_box_camera.clone(),
             res: (512, 512),
             vertex_type: VertexType::Combined,
+            ..Default::default()
         },
     ])
 }
