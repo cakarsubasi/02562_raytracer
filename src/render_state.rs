@@ -1,12 +1,13 @@
-use crate::SceneDescriptor;
+use crate::bindings::create_bind_group_layouts2;
 use crate::bindings::storage_mesh::StorageMeshGpu;
 use crate::bindings::texture::RenderSource;
 use crate::command::DisplayMode;
 use crate::mesh::Mesh;
+use crate::SceneDescriptor;
 use crate::{
     bindings::{
         bsp_tree::BspTreeGpu,
-        create_bind_group_layouts, create_bind_groups, create_shader_definitions,
+        create_bind_groups, create_shader_definitions,
         mesh::MeshGpu,
         texture::{RenderDestination, Texture},
         uniform::UniformGpu,
@@ -45,6 +46,7 @@ pub struct RenderState {
     camera: Camera,
     pub uniform: UniformGpu,
     texture: Texture,
+    background: Option<Texture>,
     mesh_handle: Option<StorageMeshGpu>,
     bsp_tree_handle: Option<BspTreeGpu>,
     bind_groups: Vec<wgpu::BindGroup>,
@@ -130,8 +132,7 @@ impl RenderState {
         let render_source = RenderSource::new(&device, scene.res);
         let render_destination = RenderDestination::new(&device, scene.res);
 
-        let additional = vec![&render_destination as &dyn Bindable];
-        let handles = Self::setup_rendering(&device, &queue, &config, &scene, Some(&additional))
+        let handles = Self::setup_rendering(&device, &queue, &config, &scene, &render_destination)
             .await
             .unwrap();
 
@@ -154,18 +155,17 @@ impl RenderState {
             texture: handles.4,
             mesh_handle: handles.5,
             bsp_tree_handle: handles.6,
+            background: None,
             camera_controller,
         }
     }
-
-    
 
     async fn setup_rendering(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
         scene: &SceneDescriptor,
-        additional: Option<&Vec<&dyn Bindable>>,
+        render_destination: &RenderDestination,
     ) -> Result<(
         wgpu::PipelineLayout,
         wgpu::RenderPipeline,
@@ -191,53 +191,25 @@ impl RenderState {
         let bsp_tree_handle = bsp_tree.and_then(|b| Some(b.into_gpu(&device)));
 
         // generate bind group layouts
-        let mut layout_entries = Vec::new();
-        layout_entries.push(uniform.get_layout_entries());
-        layout_entries.push(texture.get_layout_entries());
-        if let Some(m) = &mesh_handle {
-            layout_entries.push(m.get_layout_entries())
-        }
-        if let Some(b) = &bsp_tree_handle {
-            layout_entries.push(b.get_layout_entries())
-        }
-        if let Some(additional) = &additional {
-            additional
-                .iter()
-                .for_each(|&item| layout_entries.push(item.get_layout_entries()))
-        }
+        let handles = [
+            Some(&uniform as &dyn Bindable),
+            Some(&texture as &dyn Bindable),
+            mesh_handle
+                .as_ref()
+                .and_then(|mesh| Some(mesh as &dyn Bindable)),
+            bsp_tree_handle
+                .as_ref()
+                .and_then(|bsp| Some(bsp as &dyn Bindable)),
+            Some(render_destination as &dyn Bindable),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<&dyn Bindable>>();
 
-        let bind_group_layouts = create_bind_group_layouts(&device, &mut layout_entries);
+        let (render_pipeline_layout, bind_groups) =
+            Self::recreate_bind_groups_impl(device, &handles);
 
-        let mut bind_group_entries = Vec::new();
-        bind_group_entries.push(uniform.get_bind_group_entries());
-        bind_group_entries.push(texture.get_bind_group_entries());
-        if let Some(m) = &mesh_handle {
-            bind_group_entries.push(m.get_bind_group_entries())
-        }
-        if let Some(b) = &bsp_tree_handle {
-            bind_group_entries.push(b.get_bind_group_entries())
-        }
-        if let Some(additional) = &additional {
-            additional
-                .iter()
-                .for_each(|&item| bind_group_entries.push(item.get_bind_group_entries()))
-        }
-        let mut bind_group_entries2 = bind_group_entries.into_iter().flatten().collect::<Vec<_>>();
-
-        let bind_groups =
-            create_bind_groups(&device, &mut bind_group_entries2, &bind_group_layouts);
-
-        // create the render pipeline layout from bind group layouts
-        let render_pipeline_layout =
-            Self::create_render_pipeline_layout(device, &vec![bind_group_layouts]);
-
-        let mut shader_defs = Self::create_shader_defs(
-            &uniform,
-            &texture,
-            &mesh_handle,
-            &bsp_tree_handle,
-            additional,
-        );
+        let mut shader_defs = Self::create_shader_defs_impl(&handles);
 
         let mut file = File::open(&scene.shader)?;
         let mut shader_source = String::new();
@@ -255,7 +227,7 @@ impl RenderState {
         Ok((
             render_pipeline_layout,
             render_pipeline,
-            vec![bind_groups],
+            bind_groups,
             uniform,
             texture,
             mesh_handle,
@@ -263,76 +235,62 @@ impl RenderState {
         ))
     }
 
-    fn recreate_bind_groups(&mut self) {
-        
-        // generate bind group layouts
-        let mut layout_entries = Vec::new();
-        layout_entries.push(self.uniform.get_layout_entries());
-        layout_entries.push(self.texture.get_layout_entries());
-        if let Some(m) = &self.mesh_handle {
-            layout_entries.push(m.get_layout_entries())
-        }
-        if let Some(b) = &self.bsp_tree_handle {
-            layout_entries.push(b.get_layout_entries())
-        }
-        layout_entries.push(self.render_destination.get_layout_entries());
-
-        let bind_group_layouts = create_bind_group_layouts(&self.device, &mut layout_entries);
-
-        let mut bind_group_entries = Vec::new();
-        bind_group_entries.push(self.uniform.get_bind_group_entries());
-        bind_group_entries.push(self.texture.get_bind_group_entries());
-        if let Some(m) = &self.mesh_handle {
-            bind_group_entries.push(m.get_bind_group_entries())
-        }
-        if let Some(b) = &self.bsp_tree_handle {
-            bind_group_entries.push(b.get_bind_group_entries())
-        }
-        bind_group_entries.push(self.render_destination.get_bind_group_entries());
-
-        let mut bind_group_entries2 = bind_group_entries.into_iter().flatten().collect::<Vec<_>>();
-
-        self.bind_groups =
-            vec![create_bind_groups(&self.device, &mut bind_group_entries2, &bind_group_layouts)];
-
-        // create the render pipeline layout from bind group layouts
-        self.render_pipeline_layout =
-            Self::create_render_pipeline_layout(&self.device, &vec![bind_group_layouts]);
-
+    fn get_handles(&self) -> Vec<&dyn Bindable> {
+        [
+            Some(&self.uniform as &dyn Bindable),
+            Some(&self.texture as &dyn Bindable),
+            self.mesh_handle
+                .as_ref()
+                .and_then(|mesh| Some(mesh as &dyn Bindable)),
+            self.bsp_tree_handle
+                .as_ref()
+                .and_then(|bsp| Some(bsp as &dyn Bindable)),
+            Some(&self.render_destination as &dyn Bindable),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
     }
 
-    fn create_shader_defs(
-        uniform: &UniformGpu,
-        texture: &Texture,
-        mesh_handle: &Option<StorageMeshGpu>,
-        bsp_tree_handle: &Option<BspTreeGpu>,
-        additional: Option<&Vec<&dyn Bindable>>,
-    ) -> String {
-        let mut shader_defs = Vec::new();
-        shader_defs.push(uniform.get_bind_descriptor());
-        shader_defs.push(texture.get_bind_descriptor());
-        if let Some(m) = &mesh_handle {
-            shader_defs.push(m.get_bind_descriptor())
-        }
-        if let Some(b) = &bsp_tree_handle {
-            shader_defs.push(b.get_bind_descriptor())
-        }
-        if let Some(additional) = &additional {
-            additional
+    fn recreate_bind_groups(&mut self) -> (wgpu::PipelineLayout, Vec<wgpu::BindGroup>) {
+        Self::recreate_bind_groups_impl(&self.device, &self.get_handles())
+    }
+
+    fn recreate_bind_groups_impl(
+        device: &wgpu::Device,
+        handles: &Vec<&dyn Bindable>,
+    ) -> (wgpu::PipelineLayout, Vec<wgpu::BindGroup>) {
+        let bind_group_layout_entries = handles
+            .iter()
+            .flat_map(|&handle| handle.get_layout_entries())
+            .collect::<Vec<_>>();
+        let mut bind_group_entries = handles
+            .iter()
+            .flat_map(|&handle| handle.get_bind_group_entries())
+            .collect::<Vec<_>>();
+        let bind_group_layout = create_bind_group_layouts2(&device, bind_group_layout_entries);
+        let bind_group = create_bind_groups(device, &mut bind_group_entries, &bind_group_layout);
+        let render_pipeline_layout =
+            Self::create_render_pipeline_layout(&device, &vec![bind_group_layout]);
+        (render_pipeline_layout, vec![bind_group])
+    }
+
+    fn create_shader_defs_impl(handles: &Vec<&dyn Bindable>) -> String {
+        create_shader_definitions(
+            &handles
                 .iter()
-                .for_each(|&item| shader_defs.push(item.get_bind_descriptor()))
-        }
-        create_shader_definitions(&shader_defs)
+                .map(|&handle| handle.get_bind_descriptor())
+                .collect::<Vec<_>>(),
+        )
     }
 
     pub fn load_scene(&mut self, scene: &SceneDescriptor) -> Result<()> {
-        let additional = vec![&self.render_destination as &dyn Bindable];
         let handles = pollster::block_on(Self::setup_rendering(
             &self.device,
             &self.queue,
             &self.config,
             scene,
-            Some(&additional),
+            &self.render_destination,
         ))?;
         self.render_pipeline_layout = handles.0;
         self.render_pipeline = handles.1;
@@ -364,13 +322,7 @@ impl RenderState {
         let mut file = File::open(shader_location)?;
         let mut shader_source = String::new();
         file.read_to_string(&mut shader_source)?;
-        let shader_defs = Self::create_shader_defs(
-            &self.uniform,
-            &self.texture,
-            &self.mesh_handle,
-            &self.bsp_tree_handle,
-            Some(&vec![&self.render_destination as &dyn Bindable]),
-        );
+        let shader_defs = Self::create_shader_defs_impl(&self.get_handles());
         Self::create_shader_module(&self.device, shader_defs.as_str(), &mut shader_source).await
     }
 
@@ -513,7 +465,10 @@ impl RenderState {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
-        let source_view = self.render_source.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let source_view = self
+            .render_source
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[
@@ -599,8 +554,10 @@ impl RenderState {
             self.config.width = resolution.0;
             self.config.height = resolution.1;
             self.surface.configure(&self.device, &self.config);
-            self.render_destination.change_dimension(&self.device, (self.config.width, self.config.height));
-            self.render_source.change_dimension(&self.device, (self.config.width, self.config.height));
+            self.render_destination
+                .change_dimension(&self.device, (self.config.width, self.config.height));
+            self.render_source
+                .change_dimension(&self.device, (self.config.width, self.config.height));
         }
     }
 

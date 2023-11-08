@@ -15,10 +15,9 @@ pub trait Bindable {
 
 pub fn create_bind_group_layouts(
     device: &wgpu::Device,
-    layout_entries: &mut Vec<Vec<wgpu::BindGroupLayoutEntry>>,
+    mut layout_entries: Vec<wgpu::BindGroupLayoutEntry>,
 ) -> wgpu::BindGroupLayout {
     let huge_flattened_layout_entry = layout_entries.iter_mut()
-        .flat_map(|item| item)
         .enumerate()
         .map(|(idx, item)| { let mut item = *item;
             item.binding = idx as u32;
@@ -77,6 +76,7 @@ pub trait IntoGpu {
 
 #[derive(Clone, Copy)]
 pub enum WgslSource<'a> {
+    #[allow(dead_code)]
     Str(&'a str),
     File(&'a str), // important to avoid redefinitions
 }
