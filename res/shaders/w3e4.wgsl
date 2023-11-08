@@ -416,10 +416,10 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 }
 
 fn light_diffuse_contribution(light: Light, normal: vec3f, specular: f32) -> vec3f {
-    let one_minus_specular = 1.0 - specular;
+    //let one_minus_specular = 1.0 - specular;
     var diffuse = vec3f(dot(normal, light.w_i));
     diffuse *= light.l_i;
-    diffuse *= one_minus_specular / PI;
+    diffuse *= 1.0 / PI;
     return diffuse;
 }
 
@@ -455,19 +455,20 @@ fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     let s = hit_record.shader.shininess;
     let normal = hit_record.normal;
 
-    let w_i = ray.direction;
-    let w_o = normalize(uniforms.camera_pos - hit_record.position); // view direction
+    let w_i = normalize(ray.direction);
     let w_r = reflect(-w_i, normal);
+    let w_o = normalize(uniforms.camera_pos - hit_record.position); // view direction
 
     let light = sample_point_light(hit_record.position);
     let light_dir = light.w_i;
     let light_intensity = light.l_i;
     let refl_dir = normalize(reflect(-light_dir, normal));
+    let other_factor = saturate(dot(light_dir, normal));
 
-    let coeff = specular * (s + 2.0) / (2.0 * PI);
+    let coeff = other_factor * specular * (s + 2.0) / (2.0 * PI);
     let phong_total = pow(saturate(dot(w_o, refl_dir)), s);
 
-    return coeff * phong_total * vec3f(1.0);
+    return light_intensity * coeff * phong_total * vec3f(1.0);
 }
 
 fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
