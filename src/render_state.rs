@@ -45,8 +45,7 @@ pub struct RenderState {
     mesh_direct: MeshGpu,
     camera: Camera,
     pub uniform: UniformGpu,
-    texture: Texture,
-    background: Option<Texture>,
+    textures: Vec<Texture>,
     mesh_handle: Option<StorageMeshGpu>,
     bsp_tree_handle: Option<BspTreeGpu>,
     bind_groups: Vec<wgpu::BindGroup>,
@@ -152,10 +151,9 @@ impl RenderState {
             camera,
             bind_groups: handles.2,
             uniform: handles.3,
-            texture: handles.4,
+            textures: handles.4,
             mesh_handle: handles.5,
             bsp_tree_handle: handles.6,
-            background: None,
             camera_controller,
         }
     }
@@ -171,7 +169,7 @@ impl RenderState {
         wgpu::RenderPipeline,
         Vec<wgpu::BindGroup>,
         UniformGpu,
-        Texture,
+        Vec<Texture>,
         Option<StorageMeshGpu>,
         Option<BspTreeGpu>,
     )> {
@@ -179,7 +177,18 @@ impl RenderState {
         let uniform = UniformGpu::new(&device);
         // load texture
         let texture_bytes = include_bytes!("../res/textures/grass.jpg");
-        let texture = Texture::from_bytes(TextureInfo {name: "texture0".into(), sampler_name: "sampler0".into(), samplers: [true, true, true] }, &device, &queue, texture_bytes, "grass.jpg").unwrap();
+        let textures = vec![Texture::from_bytes(
+            TextureInfo {
+                name: "texture0".into(),
+                sampler_name: "sampler0".into(),
+                samplers: [true, true, true],
+            },
+            &device,
+            &queue,
+            texture_bytes,
+            "grass.jpg",
+        )
+        .unwrap()];
         // load model
         let model = &scene.model.as_ref().and_then(|m| Mesh::from_obj(m).ok());
         let mesh_handle = model.as_ref().and_then(|m| match scene.vertex_type {
@@ -193,7 +202,6 @@ impl RenderState {
         // generate bind group layouts
         let handles = [
             Some(&uniform as &dyn Bindable),
-            Some(&texture as &dyn Bindable),
             mesh_handle
                 .as_ref()
                 .and_then(|mesh| Some(mesh as &dyn Bindable)),
@@ -204,6 +212,7 @@ impl RenderState {
         ]
         .into_iter()
         .flatten()
+        .chain(textures.iter().map(|texture| texture as &dyn Bindable))
         .collect::<Vec<&dyn Bindable>>();
 
         let (render_pipeline_layout, bind_groups) =
@@ -229,7 +238,7 @@ impl RenderState {
             render_pipeline,
             bind_groups,
             uniform,
-            texture,
+            textures,
             mesh_handle,
             bsp_tree_handle,
         ))
@@ -238,7 +247,6 @@ impl RenderState {
     fn get_handles(&self) -> Vec<&dyn Bindable> {
         [
             Some(&self.uniform as &dyn Bindable),
-            Some(&self.texture as &dyn Bindable),
             self.mesh_handle
                 .as_ref()
                 .and_then(|mesh| Some(mesh as &dyn Bindable)),
@@ -249,6 +257,7 @@ impl RenderState {
         ]
         .into_iter()
         .flatten()
+        .chain(self.textures.iter().map(|texture| texture as &dyn Bindable))
         .collect::<Vec<_>>()
     }
 
@@ -296,7 +305,7 @@ impl RenderState {
         self.render_pipeline = handles.1;
         self.bind_groups = handles.2;
         self.uniform = handles.3;
-        self.texture = handles.4;
+        self.textures = handles.4;
         self.mesh_handle = handles.5;
         self.bsp_tree_handle = handles.6;
         // update uniforms
