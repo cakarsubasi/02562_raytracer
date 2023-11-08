@@ -230,7 +230,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let accum_color = (result + curr_sum)/f32(uniforms.iteration + 1u);
 
     let output = FragmentOutput(
-        vec4f(pow(accum_color, vec3f(1.0/1.0)), bgcolor.a),
+        vec4f(pow(accum_color, vec3f(1.5/1.0)), bgcolor.a),
         vec4f(accum_color, 1.0),
     );
     return output;
@@ -399,7 +399,6 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
         ray.tmax = light.dist - ETA * 1000.0;
 
         let blocked = intersect_scene_bsp(&ray, hit);
-        //let blocked = false;
         if (!blocked) {
             diffuse = diffuse + bdrf * light_diffuse_contribution(light, normal);
         }

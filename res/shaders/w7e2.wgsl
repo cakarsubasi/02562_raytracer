@@ -230,7 +230,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let accum_color = (result + curr_sum)/f32(uniforms.iteration + 1u);
 
     let output = FragmentOutput(
-        vec4f(pow(accum_color, vec3f(1.0/1.0)), bgcolor.a),
+        vec4f(pow(accum_color, vec3f(1.5/1.0)), bgcolor.a),
         vec4f(accum_color, 1.0),
     );
     return output;
@@ -286,7 +286,7 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
         return false;
     }
 
-    //(*r).tmax = distance;
+    (*r).tmax = distance;
     (*hit).dist = distance;
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
@@ -333,11 +333,11 @@ fn sample_area_light(pos: vec3f, idx: u32, rand: ptr<function, u32>) -> Light {
     let area = triangle_area(v0, v1, v2);
     let light_mat = materials[light_triangle.w];
     let l_e = light_mat.ambient.xyz;
-    let p1 = rnd(rand);
-    let p2 = rnd(rand);
-    let p3 = 2.0 - p1 - p2;
+    let p1 = sqrt(rnd(rand));
+    let p2 = sqrt(rnd(rand));
+    let p3 = sqrt(rnd(rand));
 
-    let center = (v0 * p1 + v1 * p2 + v2 * p3) / 2.0;
+    let center = (v0 * p1 + v1 * p2 + v2 * p3) / (p1 + p2 + p3);
 
     let light_direction = center - pos;
     let distance = sqrt(dot(light_direction, light_direction));
@@ -398,10 +398,10 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
         let light = sample_area_light(hit_record.position, idx, rand);
 
         let ray_dir = light.w_i;
-        let ray_orig = hit_record.position + normal * ETA * 10.0;
+        let ray_orig = hit_record.position + light.w_i * ETA;
         var ray = ray_init(ray_dir, ray_orig);
-        ray.tmax = light.dist - ETA * 1000.0;
-        ray.tmin = ETA * 150.0;
+        ray.tmax = light.dist - ETA * 10.0;
+        ray.tmin = ETA * 1.0;
 
         let blocked = intersect_scene_bsp(&ray, hit);
         //let blocked = false;
