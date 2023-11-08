@@ -3,41 +3,62 @@ use image::GenericImageView;
 
 use super::{Bindable, WgslBindDescriptor};
 
-// Taken from learnwgpu
+pub struct TextureInfo {
+    pub name: String,
+    pub sampler_name: String,
+    pub samplers: [bool; 3],
+}
 
 pub struct Texture {
+    pub name: String,
     texture: wgpu::Texture,
     view: wgpu::TextureView,
-    sampler_default: wgpu::Sampler,
-    sampler_bilinear: wgpu::Sampler,
-    sampler_no_filtering: wgpu::Sampler,
+    sampler_default: Option<(String, wgpu::Sampler)>,
+    sampler_bilinear: Option<(String, wgpu::Sampler)>,
+    sampler_no_filtering: Option<(String, wgpu::Sampler)>,
 }
 
 impl Texture {
     pub fn from_bytes(
+        info: TextureInfo,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         bytes: &[u8],
         label: &str,
     ) -> Result<Self> {
         let img = image::load_from_memory(bytes)?;
-        Self::from_image(device, queue, &img, Some(label))
+        Self::from_image(info, device, queue, &img, Some(label))
     }
 
     pub fn from_image(
+        info: TextureInfo,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         img: &image::DynamicImage,
         label: Option<&str>,
     ) -> Result<Self> {
-        let (texture, view, sampler_default, sampler_bilinear, sampler_no_filtering) = Self::build(device, queue, img, label);
+        let (texture, view, sampler_default, sampler_bilinear, sampler_no_filtering) =
+            Self::build(device, queue, img, label);
 
         Ok(Self {
+            name: info.name,
             texture,
             view,
-            sampler_default,
-            sampler_bilinear,
-            sampler_no_filtering,
+            sampler_default: if info.samplers[0] {
+                Some((format!("{}", info.sampler_name), sampler_default))
+            } else {
+                None
+            },
+            sampler_bilinear: if info.samplers[0] {
+                Some((format!("{}_bilinear", info.sampler_name), sampler_bilinear))
+            } else {
+                None
+            },
+            sampler_no_filtering: if info.samplers[0] {
+                Some((format!("{}_nearest", info.sampler_name), sampler_no_filtering))
+            } else {
+                None
+            },
         })
     }
 
@@ -46,7 +67,13 @@ impl Texture {
         queue: &wgpu::Queue,
         image: &image::DynamicImage,
         label: Option<&str>,
-    ) -> (wgpu::Texture, wgpu::TextureView, wgpu::Sampler, wgpu::Sampler, wgpu::Sampler) {
+    ) -> (
+        wgpu::Texture,
+        wgpu::TextureView,
+        wgpu::Sampler,
+        wgpu::Sampler,
+        wgpu::Sampler,
+    ) {
         let rgba = image.to_rgba8();
         let dimensions = image.dimensions();
 
@@ -111,104 +138,126 @@ impl Texture {
             ..Default::default()
         });
 
-        (texture, view, sampler_default, sampler_bilinear, sampler_no_filtering)
+        (
+            texture,
+            view,
+            sampler_default,
+            sampler_bilinear,
+            sampler_no_filtering,
+        )
     }
 }
 
 impl Bindable for Texture {
     fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
-        vec![
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    multisampled: false,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                },
-                count: None,
+        let mut entries = vec![wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                multisampled: false,
+                view_dimension: wgpu::TextureViewDimension::D2,
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
             },
-            wgpu::BindGroupLayoutEntry {
+            count: None,
+        }];
+
+        if let Some((_, _)) = &self.sampler_default {
+            entries.push(wgpu::BindGroupLayoutEntry {
                 binding: 1,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 // This should match the filterable field of the
                 // corresponding Texture entry above.
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
+            });
+        }
+        if let Some((_, _)) = &self.sampler_bilinear {
+            entries.push(wgpu::BindGroupLayoutEntry {
                 binding: 1,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 // This should match the filterable field of the
                 // corresponding Texture entry above.
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
+            });
+        }
+        if let Some((_, _)) = &self.sampler_bilinear {
+            entries.push(wgpu::BindGroupLayoutEntry {
                 binding: 1,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 // This should match the filterable field of the
                 // corresponding Texture entry above.
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                 count: None,
-            },
+            });
+        }
 
-        ]
+        entries
     }
 
     fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
-        vec![
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&self.view),
-            },
-            wgpu::BindGroupEntry {
+        let mut entries = vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::TextureView(&self.view),
+        }];
+        if let Some((_, sampler)) = &self.sampler_default {
+            entries.push(wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::Sampler(&self.sampler_default),
-            },
-            wgpu::BindGroupEntry {
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            });
+        }
+        if let Some((_, sampler)) = &self.sampler_bilinear {
+            entries.push(wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::Sampler(&self.sampler_bilinear),
-            },
-            wgpu::BindGroupEntry {
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            });
+        }
+        if let Some((_, sampler)) = &self.sampler_no_filtering {
+            entries.push(wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::Sampler(&self.sampler_no_filtering),
-            },
-        ]
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            });
+        }
+        entries
     }
 
     fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
-        // TODO: need to differentiate textures
-        vec![
-            WgslBindDescriptor {
+        let mut bind_descriptors = vec![WgslBindDescriptor {
+            struct_def: None,
+            bind_type: None,
+            var_name: self.name.as_str(),
+            var_type: "texture_2d<f32>",
+            extra_code: None,
+        }];
+        if let Some((name, _)) = &self.sampler_default {
+            bind_descriptors.push(WgslBindDescriptor {
                 struct_def: None,
                 bind_type: None,
-                var_name: "texture0",
-                var_type: "texture_2d<f32>",
-                extra_code: None,
-            },
-            WgslBindDescriptor {
-                struct_def: None,
-                bind_type: None,
-                var_name: "sampler0",
+                var_name: name.as_str(),
                 var_type: "sampler",
                 extra_code: None,
-            },
-            WgslBindDescriptor {
+            });
+        }
+        if let Some((name, _)) = &self.sampler_bilinear {
+            bind_descriptors.push(WgslBindDescriptor {
                 struct_def: None,
                 bind_type: None,
-                var_name: "sampler0_bilinear",
+                var_name: name.as_str(),
                 var_type: "sampler",
                 extra_code: None,
-            },
-            WgslBindDescriptor {
+            });
+        }
+        if let Some((name, _)) = &self.sampler_no_filtering {
+            bind_descriptors.push(WgslBindDescriptor {
                 struct_def: None,
                 bind_type: None,
-                var_name: "sampler0_nearest",
+                var_name: name.as_str(),
                 var_type: "sampler",
                 extra_code: None,
-            },
-        ]
+            });
+        }
+
+        bind_descriptors
     }
 }
 
@@ -220,11 +269,8 @@ pub struct RenderDestination {
 impl RenderDestination {
     pub fn new(device: &wgpu::Device, size: (u32, u32)) -> Self {
         let (texture, view) = Self::build(device, size);
-    
-        Self {
-            texture,
-            view
-        }
+
+        Self { texture, view }
     }
 
     pub fn change_dimension(&mut self, device: &wgpu::Device, new_size: (u32, u32)) {
@@ -252,11 +298,13 @@ impl RenderDestination {
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        return (texture, view)
+        return (texture, view);
     }
 
     pub fn update_view(&mut self) {
-        self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.view = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
     }
 }
 
@@ -301,10 +349,7 @@ impl RenderSource {
     pub fn new(device: &wgpu::Device, size: (u32, u32)) -> RenderSource {
         let (texture, view) = Self::build(device, size);
 
-        Self {
-            texture,
-            view,
-        }
+        Self { texture, view }
     }
 
     fn build(device: &wgpu::Device, size: (u32, u32)) -> (wgpu::Texture, wgpu::TextureView) {
@@ -324,9 +369,8 @@ impl RenderSource {
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        return (texture, view)
+        return (texture, view);
     }
-
 
     pub fn change_dimension(&mut self, device: &wgpu::Device, new_size: (u32, u32)) {
         let (texture, view) = Self::build(device, new_size);
@@ -335,6 +379,8 @@ impl RenderSource {
     }
 
     pub fn update_view(&mut self) {
-        self.view = self.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.view = self
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
     }
 }

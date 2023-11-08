@@ -1,6 +1,6 @@
 use crate::bindings::create_bind_group_layouts;
 use crate::bindings::storage_mesh::StorageMeshGpu;
-use crate::bindings::texture::RenderSource;
+use crate::bindings::texture::{RenderSource, TextureInfo};
 use crate::command::DisplayMode;
 use crate::mesh::Mesh;
 use crate::SceneDescriptor;
@@ -179,7 +179,7 @@ impl RenderState {
         let uniform = UniformGpu::new(&device);
         // load texture
         let texture_bytes = include_bytes!("../res/textures/grass.jpg");
-        let texture = Texture::from_bytes(&device, &queue, texture_bytes, "grass.jpg").unwrap();
+        let texture = Texture::from_bytes(TextureInfo {name: "texture0".into(), sampler_name: "sampler0".into(), samplers: [true, true, true] }, &device, &queue, texture_bytes, "grass.jpg").unwrap();
         // load model
         let model = &scene.model.as_ref().and_then(|m| Mesh::from_obj(m).ok());
         let mesh_handle = model.as_ref().and_then(|m| match scene.vertex_type {
