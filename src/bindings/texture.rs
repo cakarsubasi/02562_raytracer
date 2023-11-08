@@ -1,5 +1,7 @@
+use std::{fs::File, path::Path};
+
 use anyhow::*;
-use image::GenericImageView;
+use image::{GenericImageView, io::Reader};
 
 use super::{Bindable, WgslBindDescriptor};
 
@@ -19,26 +21,38 @@ pub struct Texture {
 }
 
 impl Texture {
+    pub fn from_file<P>(
+        info: TextureInfo,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        file_name: P,
+    ) -> Result<Self>
+    where
+        P: AsRef<Path> + std::fmt::Debug,
+    {
+        let file = File::open(file_name.as_ref())?;
+        let image = Reader::open(file_name)?.decode()?;
+        Self::from_image(info, device, queue, &image)
+    }
+
     pub fn from_bytes(
         info: TextureInfo,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         bytes: &[u8],
-        label: &str,
     ) -> Result<Self> {
         let img = image::load_from_memory(bytes)?;
-        Self::from_image(info, device, queue, &img, Some(label))
+        Self::from_image(info, device, queue, &img)
     }
 
     pub fn from_image(
         info: TextureInfo,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        img: &image::DynamicImage,
-        label: Option<&str>,
+        img: &image::DynamicImage
     ) -> Result<Self> {
         let (texture, view, sampler_default, sampler_bilinear, sampler_no_filtering) =
-            Self::build(device, queue, img, label);
+            Self::build(device, queue, img, &info.name);
 
         Ok(Self {
             name: info.name,
@@ -55,7 +69,10 @@ impl Texture {
                 None
             },
             sampler_no_filtering: if info.samplers[0] {
-                Some((format!("{}_nearest", info.sampler_name), sampler_no_filtering))
+                Some((
+                    format!("{}_nearest", info.sampler_name),
+                    sampler_no_filtering,
+                ))
             } else {
                 None
             },
@@ -66,7 +83,7 @@ impl Texture {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         image: &image::DynamicImage,
-        label: Option<&str>,
+        label: &str,
     ) -> (
         wgpu::Texture,
         wgpu::TextureView,
@@ -83,7 +100,7 @@ impl Texture {
             depth_or_array_layers: 1,
         };
         let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label,
+            label: Some(label),
             size,
             mip_level_count: 1,
             sample_count: 1,

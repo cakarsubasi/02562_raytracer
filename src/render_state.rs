@@ -177,7 +177,7 @@ impl RenderState {
         let uniform = UniformGpu::new(&device);
         // load texture
         let texture_bytes = include_bytes!("../res/textures/grass.jpg");
-        let textures = vec![Texture::from_bytes(
+        let mut textures = vec![Texture::from_bytes(
             TextureInfo {
                 name: "texture0".into(),
                 sampler_name: "sampler0".into(),
@@ -185,10 +185,26 @@ impl RenderState {
             },
             &device,
             &queue,
-            texture_bytes,
-            "grass.jpg",
+            texture_bytes
         )
         .unwrap()];
+        // load background
+        if let Some(path) = &scene.background_hdri {
+            
+            let background = Texture::from_file(
+                TextureInfo {
+                    name: "hdri0".into(),
+                    sampler_name: "hdri0_sampler".into(),
+                    samplers: [true, false, false],
+                },
+                &device,
+                &queue,
+                path
+            )?;
+
+            textures.push(background);
+        }
+
         // load model
         let model = &scene.model.as_ref().and_then(|m| Mesh::from_obj(m).ok());
         let mesh_handle = model.as_ref().and_then(|m| match scene.vertex_type {
