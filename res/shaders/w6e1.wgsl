@@ -246,7 +246,7 @@ fn sample_directional_light(pos: vec3f, idx: u32) -> Light {
     // a directional light is much like a point light, but the intensity
     // is independent of the distance
     let light_direction = -normalize(vec3f(-1.0));
-    let light_intensity = 5.0 * vec3f(PI, PI, PI);
+    let light_intensity = 1.0 * vec3f(PI, PI, PI);
     let distance = 1.0;
     var light = light_init();
     light.l_i = light_intensity;
