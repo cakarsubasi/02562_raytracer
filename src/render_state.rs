@@ -1,4 +1,4 @@
-use crate::bindings::create_bind_group_layouts2;
+use crate::bindings::create_bind_group_layouts;
 use crate::bindings::storage_mesh::StorageMeshGpu;
 use crate::bindings::texture::RenderSource;
 use crate::command::DisplayMode;
@@ -268,7 +268,7 @@ impl RenderState {
             .iter()
             .flat_map(|&handle| handle.get_bind_group_entries())
             .collect::<Vec<_>>();
-        let bind_group_layout = create_bind_group_layouts2(&device, bind_group_layout_entries);
+        let bind_group_layout = create_bind_group_layouts(&device, bind_group_layout_entries);
         let bind_group = create_bind_groups(device, &mut bind_group_entries, &bind_group_layout);
         let render_pipeline_layout =
             Self::create_render_pipeline_layout(&device, &vec![bind_group_layout]);
