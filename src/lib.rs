@@ -352,9 +352,9 @@ fn rendering_thread(
                     }
                 });
             });
+            render_state.update();
         }
 
-        render_state.update();
         loop {
             match receiver.recv_timeout(std::time::Duration::from_millis(6)) {
                 Err(RecvTimeoutError::Timeout) => break,
@@ -459,6 +459,8 @@ fn rendering_thread(
                             Ok(_) => 
                             {
                                 render_stats.reset();
+                                render_state.uniform.reset_iteration();
+                                render_state.uniform.max_iterations = max_iter;
                                 eprintln!("Successfully loaded new scene: {:?}", scenes[idx])
                             }
                             Err(err) => eprintln!("{err}"),

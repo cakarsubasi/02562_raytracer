@@ -135,11 +135,7 @@ impl UniformGpu {
     pub fn update_uv_scale(&mut self, uv_scale: (f32, f32)) {
         self.uniforms.uv_scale = uv_scale.into();
     }
-
-    pub fn update_iteration(&mut self, iteration: u32) {
-        self.uniforms.iteration = iteration;
-    }
-
+    
     pub fn update_resolution(&mut self, resolution: (u32, u32)) {
         self.uniforms.canvas_resolution = resolution.into()
     }
