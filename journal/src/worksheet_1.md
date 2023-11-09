@@ -1,16 +1,8 @@
 # The Basics
 
+As I have chosen to do this project in Rust instead of Javascript, this section will differ the strongest from the prescribed exercises. 
 
-As I have chosen to do this project in Rust instead of
-Javascript, this section will differ the strongest from
-the prescribed exercises. 
-
-In addition, Rust requires a much more significant amount
-of "boilerplate" code to manage windows, UI, and hardware
-access as we do not have a browser and a DOM to take care
-of difficult parts for us. This would also make it 
-considerably more difficult to provide a full copy of the code (as it would get out of control very quickly) for each
-section, 
+In addition, Rust requires a much more significant amount of "boilerplate" code to manage windows, UI, and hardware access as we do not have a browser and a DOM to take care of difficult parts for us. This would also make it considerably more difficult to provide a full copy of the code for each section as that would get out of control quickly. So I ended up having to implement a lot of nominally unnecessary features  
 
 # 1. Drawing to a Window, Clearing the Background
 
@@ -20,6 +12,7 @@ Most of the window management code is based directly on {{#cite LEARNWGPU:1}}.
 
 Winit also supports the browser and here is a screenshot 
 
+![](./img/w1_e1.png)
 
 # 2. Drawing a Rectangle
 
