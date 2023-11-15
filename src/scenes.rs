@@ -305,5 +305,32 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             vertex_type: VertexType::Combined,
             ..Default::default()
         },
+        SceneDescriptor {
+            name: String::from("W8 E1 Cornell Box Balls"),
+            shader: PathBuf::from("res/shaders/w8e1.wgsl"),
+            model: Some(cornell_box_path.clone()),
+            camera: cornell_box_camera.clone(),
+            res: (512, 512),
+            vertex_type: VertexType::Combined,
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("W8 E2 Cornell Box Balls"),
+            shader: PathBuf::from("res/shaders/w8e2.wgsl"),
+            model: Some(cornell_box_path.clone()),
+            camera: cornell_box_camera.clone(),
+            res: (512, 512),
+            vertex_type: VertexType::Combined,
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("W8 E3 Absorption"),
+            shader: PathBuf::from("res/shaders/w8e3.wgsl"),
+            model: Some(cornell_box_path.clone()),
+            camera: cornell_box_camera.clone(),
+            res: (512, 512),
+            vertex_type: VertexType::Combined,
+            ..Default::default()
+        },
     ])
 }
