@@ -1,5 +1,5 @@
 const PI = 3.14159265359;
-const ETA = 0.001;
+const ETA = 0.01;
 
 const BACKGROUND_COLOR: vec3f = vec3f(0.0, 0.0, 0.0);
 
@@ -92,8 +92,6 @@ struct HitRecord {
     normal: vec3f,
     // color contribution
     factor: vec3f,
-    ambient: vec3f,
-    diffuse: vec3f,
     emit: bool,
     uv0: vec2f,
     material: u32,
@@ -113,8 +111,6 @@ fn hit_record_init() -> HitRecord {
         vec3f(0.0),
         // color contribution
         vec3f(1.0),
-        vec3f(0.0),
-        vec3f(0.0),
         true,
         vec2f(0.0),
         0u,
@@ -169,6 +165,13 @@ fn rnd(prev: ptr<function, u32>) -> f32
     return f32(mcg31(prev)) / f32(0x80000000u);
 }
 
+// Generate random float in [0, 1)
+fn rnd_int(prev: ptr<function, u32>) -> u32
+{
+    return mcg31(prev);
+}
+
+
 // Given a direction vector v sampled around the z-axis of a
 // local coordinate system, this function applies the same
 // rotation to v as is needed to rotate the z-axis to the
@@ -177,11 +180,11 @@ fn rnd(prev: ptr<function, u32>) -> f32
 //  Duff et al., Journal of Computer Graphics Techniques 6, 2017].
 fn rotate_to_normal(normal: vec3f, v: vec3f) -> vec3f
 {
-    let signbit = sign(normal.z + 1.0e-16f);
-    let a = -1.0f/(1.0f + abs(normal.z));
+    let signbit = sign(normal.z + 1.0e-16);
+    let a = -1.0/(1.0 + abs(normal.z));
     let b = normal.x*normal.y*a;
-    return vec3f(1.0f + normal.x*normal.x*a, b, -signbit*normal.x)*v.x
-      + vec3f(signbit*b, signbit*(1.0f + normal.y*normal.y*a), -normal.y)*v.y
+    return vec3f(1.0 + normal.x*normal.x*a, b, -signbit*normal.x)*v.x
+      + vec3f(signbit*b, signbit*(1.0 + normal.y*normal.y*a), -normal.y)*v.y
       + normal*v.z;
 }
 
@@ -255,14 +258,16 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         }
     }
     
-    //let multiplier = 1.0 / f32(subdiv * subdiv);
     let curr_sum = textureLoad(renderTexture, vec2u(in.clip_position.xy), 0).rgb*f32(uniforms.iteration);
     let accum_color = (result + curr_sum)/f32(uniforms.iteration + 1u);
 
-    let output = FragmentOutput(
-        vec4f(pow(accum_color, vec3f(1.5/1.0)), bgcolor.a),
-        vec4f(accum_color, 1.0),
+    var output = FragmentOutput(
+        vec4f(saturate(pow(accum_color, vec3f(1.5/1.0))), bgcolor.a),
+        max(vec4f(accum_color, 1.0), vec4f(0.0)),
     );
+    if (any(result < vec3f(0.0)) || any(accum_color < vec3f(0.0))) {
+        output.frame = vec4f(error_shader(), bgcolor.a);
+    }
     return output;
 }
 
@@ -363,15 +368,19 @@ fn sample_area_light(pos: vec3f, idx: u32, rand: ptr<function, u32>) -> Light {
     let area = triangle_area(v0, v1, v2);
     let light_mat = materials[light_triangle.w];
     let l_e = light_mat.ambient.xyz;
-    let p1 = sqrt(rnd(rand));
-    let p2 = sqrt(rnd(rand));
-    let p3 = sqrt(rnd(rand));
+    let psi1 = sqrt(rnd(rand));
+    let psi2 = rnd(rand);
+    let alpha = 1.0 - psi1;
+    let beta = (1.0 - psi2) * psi1;
+    let gamma = psi2 * psi1;
+    let normal = normalize(cross((v0 - v1), (v0 - v2)));
 
-    let center = (v0 * p1 + v1 * p2 + v2 * p3) / (p1 + p2 + p3);
+    let sampled_point = (v0 * alpha + v1 * beta + v2 * gamma);
 
-    let light_direction = center - pos;
+    let light_direction = sampled_point - pos;
+    let cos_l = max(dot(normalize(-light_direction), normal), 0.0);
     let distance = sqrt(dot(light_direction, light_direction));
-    let light_intensity = l_e * area;
+    let light_intensity = (l_e * area) * cos_l / (distance * distance);
     var light = light_init();
     light.l_i = light_intensity;
     light.w_i = normalize(light_direction);
@@ -412,24 +421,55 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<functio
             color = error_shader();
         }
     }
-
     return color;
 }
 
-fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f { 
-    var hit_record = *hit;
-    let normal = hit_record.normal;
+fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f {
     let material = get_material(hit);
-    let bdrf = material.diffuse.rgb;
-    
+    let brdf = material.diffuse.rgb / PI;
+    let emission = material.ambient.rgb;
     var diffuse = vec3f(0.0);
     var ambient = vec3f(0.0);
 
-    light_contribution(r, hit, rand);
-    diffuse += (*hit).diffuse;
-    ambient += (*hit).ambient;
+    let normal = (*hit).normal;
 
+    let light_tris = arrayLength(&lightIndices) - 1u;
+    let idx = (rnd_int(rand) % light_tris) + 1u;
+
+    let light = sample_area_light((*hit).position, idx, rand);
+
+    let ray_dir = light.w_i;
+    let ray_orig = (*hit).position;
+    var ray = ray_init(ray_dir, ray_orig);
+    ray.tmax = light.dist - ETA;
+    ray.tmin = ETA;
+
+    var hit_info = hit_record_init();
+    let blocked = intersect_trimesh(&ray, &hit_info);
+    //let blocked = false;
+    if (!blocked) {
+        diffuse = brdf * vec3f(saturate(dot(normal, light.w_i))) * light.l_i * f32(light_tris);
+    }  
+    // Only during direct lighting 
+    if ((*hit).emit) { 
+        ambient = emission;
+    }
+
+    diffuse = diffuse * (*hit).factor;
+    (*hit).factor *=  brdf * PI;
+    let prob_reflection = (brdf.r + brdf.g + brdf.b) / 3.0;
+    let step = rnd(rand);
+    if (step < prob_reflection) {
+        setup_indirect(r, hit, rand);
+        (*hit).factor /= prob_reflection;
+    }
+
+    return diffuse + ambient;
+}
+
+fn setup_indirect(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) {
     // Indirect contribution
+    let normal = normalize((*hit).normal);
     let xi1 = rnd(rand);
     let xi2 = rnd(rand);
     let thet = acos(sqrt(1.0-xi1));
@@ -437,50 +477,14 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
     let tang_dir = spherical_direction(sin(thet), cos(thet), phi);
     let indirect_dir = rotate_to_normal(normal, tang_dir);
 
-    return diffuse_and_ambient(diffuse, ambient);
+    (*r).direction = indirect_dir;
+    (*r).origin = (*hit).position;
+    (*r).tmin = ETA;
+    (*r).tmax = 5000.0;
+
+    (*hit).has_hit = false; 
+    (*hit).emit = false;
 }
-
-fn light_contribution(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) {
-    let material = get_material(hit);
-    let bdrf = material.diffuse.rgb;
-    let normal = (*hit).normal;
-
-    let light_tris = arrayLength(&lightIndices);
-    for (var idx = 1u; idx < light_tris; idx++) {
-        let light = sample_area_light((*hit).position, idx, rand);
-
-        let ray_dir = light.w_i;
-        let ray_orig = (*hit).position + light.w_i * ETA;
-        var ray = ray_init(ray_dir, ray_orig);
-        ray.tmax = light.dist - ETA * 10.0;
-        ray.tmin = ETA * 1.0;
-
-        let blocked = intersect_scene_bsp(&ray, hit);
-        //let blocked = false;
-        
-        if (!blocked) {
-            (*hit).diffuse = bdrf * light_diffuse_contribution(light, normal);;
-        }            
-        (*hit).ambient += bdrf;
-
-        if (!(*hit).emit) {
-            (*hit).ambient += material.ambient.rgb;
-        }
-
-    }
-}
-
-fn light_diffuse_contribution(light: Light, normal: vec3f) -> vec3f {
-    var diffuse = vec3f(dot(normal, light.w_i));
-    diffuse = diffuse / (light.dist * light.dist);
-    diffuse *= light.l_i;
-    diffuse = diffuse / PI;
-    return diffuse;
-}
-
-fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
-    return 0.9 * diffuse + 0.1 * ambient;
-} 
 
 fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f { 
     var hit_record = *hit;
