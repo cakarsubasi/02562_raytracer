@@ -10,4 +10,5 @@
 - [Worksheet 7](./worksheet_7.md)
 - [Worksheet 8](./worksheet_8.md)
 - [Worksheet 9](./worksheet_9.md)
+- [Worksheet 10](./worksheet_10.md)
 

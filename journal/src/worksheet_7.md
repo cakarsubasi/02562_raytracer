@@ -7,8 +7,8 @@ Done. Badly.
 
 # 2. Soft Shadows
 
-Done but kinda brooken.
+Done.
 
 # 3. Indirect Illumination
 
-Not done.
+Done.
