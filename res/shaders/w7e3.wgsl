@@ -14,7 +14,7 @@ const SHADER_TYPE_BASECOLOR: u32 = 6u;
 const SHADER_TYPE_NO_RENDER: u32 = 255u;
 const SHADER_TYPE_DEFAULT: u32 = 0u;
 
-const MAX_DEPTH: i32 = 10;
+const MAX_DEPTH: i32 = 50;
 
 //@group(0) @binding(1)
 //var<uniform> selection: u32;
@@ -248,7 +248,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var hit = hit_record_init();
     for (var i = 0; i < max_depth; i++) {
         if (intersect_scene_bsp(&r, &hit)) {
-            result += shade(&r, &hit, &t);
+            result += min(shade(&r, &hit, &t), vec3f(10.0));
         } else {
             result += bgcolor.rgb; break;
         }
