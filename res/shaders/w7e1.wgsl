@@ -334,10 +334,12 @@ fn sample_area_light(pos: vec3f, idx: u32) -> Light {
     let light_mat = materials[light_triangle.w];
     let l_e = light_mat.ambient.xyz;
     let center = (v0 + v1 + v2) / 3.0;
+    let normal = normalize(cross((v0 - v1), (v0 - v2)));
 
     let light_direction = center - pos;
+    let cos_l = dot(normalize(-light_direction), normal);
     let distance = sqrt(dot(light_direction, light_direction));
-    let light_intensity = l_e * area;
+    let light_intensity = (l_e * area) * cos_l; // / (distance * distance);
     var light = light_init();
     light.l_i = light_intensity;
     light.w_i = normalize(light_direction);
