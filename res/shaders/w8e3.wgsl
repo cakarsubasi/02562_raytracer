@@ -298,6 +298,7 @@ fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> 
     if (current) {
         (*hit).shader = SHADER_TYPE_TRANSPARENT;
         (*hit).ior1_over_ior2 = 1.5;
+        (*hit).extinction = vec3f(0.4, 0.1, 0.9);
     }
     has_hit = has_hit || current;
     current = intersect_trimesh(r, hit);
@@ -472,7 +473,7 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
     }  
     // Add emission only during direct lighting pass 
     if ((*hit).emit) { 
-        ambient = emission;
+        ambient = emission * (*hit).factor;
     }
 
     // Scale diffuse and hit factor and Russian Roulette to decide to trace more
@@ -532,14 +533,20 @@ fn transparent(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<f
     // normals point outward, so if this is positive
     // we are inside the object
     // and if this is negative, we are outside
+    var absorption = 0.0;
+    var T_r = vec3f(1.0);
     if (cos_thet_i < 0.0) {
-        // outside
+        // entering
         cos_thet_i = dot(w_i, -normal); 
         out_normal = -normal;
     } else {
-        // inside
+        // exiting
         ior = 1.0 / ior;
         out_normal = normal;
+        let s = length((*hit).position - (*r).origin);
+        let rho_t = (*hit).extinction;
+        T_r = exp(-rho_t*s);
+        absorption = 1.0 - (T_r.r + T_r.g + T_r.b) / 3.0;
     }
 
     let cos_thet_t_2 = (1.0 - (ior*ior) * (1.0 - cos_thet_i * cos_thet_i));
@@ -564,6 +571,10 @@ fn transparent(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<f
         (*hit).normal = out_normal;
         return mirror(r, hit, rand);
     } else {
+        let step1 = rnd(rand);
+        if (step1 < absorption) {
+            (*hit).factor *= (*hit).extinction / absorption;
+        }
         return vec3f(0.0);
     }
 }

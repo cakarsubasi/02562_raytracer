@@ -3,12 +3,12 @@
 
 # 1. Fresnel reflectance
 
-Not done.
+Done.
 
 # 2. Indirect illumination
 
-Not done.
+Done.
 
 # 3. Absorption
 
-Not done.
+Partially done.
