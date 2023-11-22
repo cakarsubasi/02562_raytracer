@@ -1,5 +1,5 @@
 const PI = 3.14159265359;
-const ETA = 0.01;
+const ETA = 0.0001;
 
 const BACKGROUND_COLOR: vec3f = vec3f(0.0, 0.0, 0.0);
 
@@ -230,7 +230,14 @@ fn get_camera_ray(uv: vec2f, jitter: vec2f) -> Ray {
 }
 
 fn environment_map(r: ptr<function, Ray>) -> vec3f {
-    return vec3f(0.3);
+    let direction = (*r).direction;
+    let d_x = direction.x;
+    let d_y = direction.y;
+    let d_z = direction.z;
+    let u = 0.5 + ((0.5 / PI) * atan(d_x/-d_z));
+    let v = 1.0 / PI * acos(-d_y);
+    let result = textureSample(hdri0, hdri0_sampler, vec2f(u % 1.0, 1.0 - v)).rgb;
+    return result;
 }
 
 // Fragment shader
@@ -282,7 +289,7 @@ fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> 
     var current = false;
     current = intersect_trimesh(r, hit);
     if (current) {
-        (*hit).shader = SHADER_TYPE_BASECOLOR;
+        (*hit).shader = uniforms.selection1;
     }
     has_hit = has_hit || current;
     return has_hit;
