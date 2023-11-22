@@ -248,7 +248,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var hit = hit_record_init();
     for (var i = 0; i < max_depth; i++) {
         if (intersect_scene_bsp(&r, &hit)) {
-            result += min(shade(&r, &hit, &t), vec3f(10.0));
+            result += shade(&r, &hit, &t);
         } else {
             result += bgcolor.rgb; break;
         }
@@ -433,11 +433,12 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
 
     let normal = (*hit).normal;
 
+    // Pick a random area light to sample
     let light_tris = arrayLength(&lightIndices) - 1u;
     let idx = (rnd_int(rand) % light_tris) + 1u;
-
     let light = sample_area_light((*hit).position, idx, rand);
 
+    // Trace shadow rays to area light
     let ray_dir = light.w_i;
     let ray_orig = (*hit).position;
     var ray = ray_init(ray_dir, ray_orig);
@@ -446,15 +447,16 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
 
     var hit_info = hit_record_init();
     let blocked = intersect_trimesh(&ray, &hit_info);
-    //let blocked = false;
+
     if (!blocked) {
         diffuse = brdf * vec3f(saturate(dot(normal, light.w_i))) * light.l_i * f32(light_tris);
     }  
-    // Only during direct lighting 
+    // Add emission only during direct lighting pass 
     if ((*hit).emit) { 
         ambient = emission;
     }
 
+    // Scale diffuse and hit factor and Russian Roulette to decide to trace more
     diffuse = diffuse * (*hit).factor;
     (*hit).factor *=  brdf * PI;
     let prob_reflection = (brdf.r + brdf.g + brdf.b) / 3.0;

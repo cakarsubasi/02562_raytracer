@@ -1,7 +1,7 @@
 const PI = 3.14159265359;
 const ETA = 0.01;
 
-const BACKGROUND_COLOR: vec3f = vec3f(0.0, 0.0, 0.0);
+const BACKGROUND_COLOR: vec3f = vec3f(0.1, 0.3, 0.6);
 
 alias ShaderType = u32;
 const SHADER_TYPE_LAMBERTIAN: u32 = 0u;
@@ -11,23 +11,11 @@ const SHADER_TYPE_TRANSMIT: u32 = 3u;
 const SHADER_TYPE_GLOSSY: u32 = 4u;
 const SHADER_TYPE_NORMAL: u32 = 5u;
 const SHADER_TYPE_BASECOLOR: u32 = 6u;
+const SHADER_TYPE_TRANSPARENT: u32 = 7u;
 const SHADER_TYPE_NO_RENDER: u32 = 255u;
 const SHADER_TYPE_DEFAULT: u32 = 0u;
 
 const MAX_DEPTH: i32 = 10;
-
-//@group(0) @binding(1)
-//var<uniform> selection: u32;
-// Stratified jitter sampling array TODO
-//@group(0) @binding(2)
-//var<storage> jitter: array<vec2f>;
-
-// GPU will always align to 16, so this does not waste space
-//@group(2) @binding(0)
-//var<storage> vertexBuffer: array<vec4f>;
-//// GPU will always align to 16, so this does not waste space
-//@group(2) @binding(1)
-//var<storage> indexBuffer: array<vec4u>;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -171,31 +159,16 @@ fn rnd_int(prev: ptr<function, u32>) -> u32
     return mcg31(prev);
 }
 
+fn fresnel_r(cos_thet_i: f32, cos_thet_t: f32, ni_over_nt: f32) -> f32 {
+    let ii = ni_over_nt * cos_thet_i;
+    let tt = 1.0 * cos_thet_t;
+    let ti = 1.0 * cos_thet_i;
+    let it = ni_over_nt * cos_thet_t;
 
-// Given a direction vector v sampled around the z-axis of a
-// local coordinate system, this function applies the same
-// rotation to v as is needed to rotate the z-axis to the
-// actual direction n that v should have been sampled around
-// [Frisvad, Journal of Graphics Tools 16, 2012;
-//  Duff et al., Journal of Computer Graphics Techniques 6, 2017].
-fn rotate_to_normal(normal: vec3f, v: vec3f) -> vec3f
-{
-    let signbit = sign(normal.z + 1.0e-16);
-    let a = -1.0/(1.0 + abs(normal.z));
-    let b = normal.x*normal.y*a;
-    return vec3f(1.0 + normal.x*normal.x*a, b, -signbit*normal.x)*v.x
-      + vec3f(signbit*b, signbit*(1.0 + normal.y*normal.y*a), -normal.y)*v.y
-      + normal*v.z;
-}
-
-// Given spherical coordinates, where theta is the
-// polar angle and phi is the azimuthal angle, this
-// function returns the corresponding direction vector
-fn spherical_direction(sin_theta: f32, cos_theta: f32, phi: f32) -> vec3f
-{
-    let sin_phi = sin(phi);
-    let cos_phi = cos(phi);
-    return vec3f(sin_theta*cos_phi, sin_theta*sin_phi, cos_theta);
+    let r1 = (ii - tt) / (ii + tt);
+    let r2 = (ti - it) / (ti + it);
+    let R = 0.5 * (r1 * r1 + r2 * r2);
+    return R;
 }
 
 @vertex
@@ -274,6 +247,16 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
     var has_hit = false;
     var current = false;
+    current = intersect_sphere(r, hit, vec3f(420.0, 90.0, 370.0), 90.0);
+    if (current) {
+        (*hit).shader = SHADER_TYPE_MIRROR;
+    }
+    has_hit = has_hit || current;
+    current = intersect_sphere(r, hit, vec3f(130.0, 90.0, 250.0), 90.0);
+    if (current) {
+        (*hit).shader = SHADER_TYPE_TRANSPARENT;
+        (*hit).ior1_over_ior2 = 1.5;
+    }
     has_hit = has_hit || current;
     current = intersect_trimesh(r, hit);
     if (current) {
@@ -417,6 +400,9 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<functio
         case 6u: {
             color = shade_base_color(r, hit, rand);
         }
+        case 7u: {
+            color = transparent(r, hit, rand);
+        }
         default: {
             color = error_shader();
         }
@@ -445,8 +431,7 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
     ray.tmin = ETA;
 
     var hit_info = hit_record_init();
-    let blocked = intersect_trimesh(&ray, &hit_info);
-    //let blocked = false;
+    let blocked = intersect_scene_bsp(&ray, &hit_info);
     if (!blocked) {
         diffuse = brdf * vec3f(saturate(dot(normal, light.w_i))) * light.l_i * f32(light_tris);
     }  
@@ -455,35 +440,7 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
         ambient = emission;
     }
 
-    diffuse = diffuse * (*hit).factor;
-    (*hit).factor *=  brdf * PI;
-    let prob_reflection = (brdf.r + brdf.g + brdf.b) / 3.0;
-    let step = rnd(rand);
-    if (step < prob_reflection) {
-        setup_indirect(r, hit, rand);
-        (*hit).factor /= prob_reflection;
-    }
-
     return diffuse + ambient;
-}
-
-fn setup_indirect(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) {
-    // Indirect contribution
-    let normal = normalize((*hit).normal);
-    let xi1 = rnd(rand);
-    let xi2 = rnd(rand);
-    let thet = acos(sqrt(1.0-xi1));
-    let phi = 2.0 * PI * xi2;
-    let tang_dir = spherical_direction(sin(thet), cos(thet), phi);
-    let indirect_dir = rotate_to_normal(normal, tang_dir);
-
-    (*r).direction = indirect_dir;
-    (*r).origin = (*hit).position;
-    (*r).tmin = ETA;
-    (*r).tmax = 5000.0;
-
-    (*hit).has_hit = false; 
-    (*hit).emit = false;
 }
 
 fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f { 
@@ -491,13 +448,11 @@ fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<functi
     
     let normal = hit_record.normal;
     let ray_dir = reflect((*r).direction, normal);
-    let ray_orig = hit_record.position + normal * ETA;
+    let ray_orig = hit_record.position;
     *r = ray_init(ray_dir, ray_orig);
 
     hit_record.has_hit = false;
-
     *hit = hit_record;
-
     return vec3f(0.0, 0.0, 0.0);
 }
 
@@ -570,6 +525,51 @@ fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<func
 
     *hit = hit_record;
     return vec3f(0.0, 0.0, 0.0);
+}
+
+fn transparent(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f {
+    let w_i = -normalize((*r).direction);
+    let normal = normalize((*hit).normal);
+    var out_normal = vec3f(0.0);
+    var ior = (*hit).ior1_over_ior2;
+    // figure out if we are inside or outside
+    var cos_thet_i = dot(w_i, normal);
+    // normals point outward, so if this is positive
+    // we are inside the object
+    // and if this is negative, we are outside
+    if (cos_thet_i < 0.0) {
+        // outside
+        cos_thet_i = dot(w_i, -normal); 
+        out_normal = -normal;
+    } else {
+        // inside
+        ior = 1.0 / ior;
+        out_normal = normal;
+    }
+
+    let cos_thet_t_2 = (1.0 - (ior*ior) * (1.0 - cos_thet_i * cos_thet_i));
+    var reflection_prob = 0.0;
+    if (cos_thet_t_2 < 0.0) {
+        // total internal reflection
+        reflection_prob = 1.0;
+    } else {
+        reflection_prob = fresnel_r(cos_thet_i, sqrt(cos_thet_t_2), ior);
+    }
+    let tangent = (out_normal * cos_thet_i - w_i);
+    
+    let w_t = ior * tangent - (normalize(out_normal) * sqrt(cos_thet_t_2));
+    let orig = (*hit).position;
+
+    *r = ray_init(w_t, orig); 
+    (*hit).has_hit = false;
+    
+    let step = rnd(rand);
+    if (step < reflection_prob) {
+        (*hit).normal = out_normal;
+        return mirror(r, hit, rand);
+    } else {
+        return vec3f(0.0);
+    }
 }
 
 
