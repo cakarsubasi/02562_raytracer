@@ -75,13 +75,14 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
         ..Default::default()
     };
 
-    
-
     let cornell_box_path = PathBuf::from("res/models/CornellBox.obj");
     let cornell_box_with_blocks_path = PathBuf::from("res/models/CornellBoxWithBlocks.obj");
     let bunny_path = PathBuf::from("res/models/bunny.obj");
     let teapot_path = PathBuf::from("res/models/teapot.obj");
     let dragon_path = PathBuf::from("res/models/dragon.obj");
+
+    let campus_background_path = PathBuf::from("res/textures/luxo_pxr_campus.jpg");
+    let campus_background_hdr_path = PathBuf::from("res/textures/luxo_pxr_campus.hdr.png");
 
     Arc::new([
         SceneDescriptor {
@@ -331,6 +332,42 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             res: (512, 512),
             vertex_type: VertexType::Combined,
             ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("W9 E1 Teapot"),
+            shader: PathBuf::from("res/shaders/w9e1.wgsl"),
+            model: Some(teapot_path.clone()),
+            camera: utah_teapot_camera.clone(),
+            res: (800, 450),
+            vertex_type: VertexType::Combined,
+            background_hdri: Some(campus_background_path.clone()),
+        },
+        SceneDescriptor {
+            name: String::from("W9 E1 Bunny"),
+            shader: PathBuf::from("res/shaders/w9e1.wgsl"),
+            model: Some(bunny_path.clone()),
+            camera: bunny_camera.clone(),
+            res: (512, 512),
+            vertex_type: VertexType::Combined,
+            background_hdri: Some(campus_background_path.clone()),
+        },
+        SceneDescriptor {
+            name: String::from("W9 E2 Teapot"),
+            shader: PathBuf::from("res/shaders/w9e2.wgsl"),
+            model: Some(teapot_path.clone()),
+            camera: utah_teapot_camera.clone(),
+            res: (800, 450),
+            vertex_type: VertexType::Combined,
+            background_hdri: Some(campus_background_hdr_path.clone()),
+        },
+        SceneDescriptor {
+            name: String::from("W9 E2 Bunny"),
+            shader: PathBuf::from("res/shaders/w9e2.wgsl"),
+            model: Some(bunny_path.clone()),
+            camera: bunny_camera.clone(),
+            res: (512, 512),
+            vertex_type: VertexType::Combined,
+            background_hdri: Some(campus_background_hdr_path.clone()),
         },
     ])
 }
