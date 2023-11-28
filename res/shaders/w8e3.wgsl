@@ -113,7 +113,7 @@ fn hit_record_init() -> HitRecord {
         vec3f(0.0),
         // color contribution
         vec3f(1.0),
-        vec3f(1.0),
+        vec3f(0.0),
         true,
         vec2f(0.0),
         0u,
@@ -247,6 +247,7 @@ fn get_camera_ray(uv: vec2f, jitter: vec2f) -> Ray {
 @fragment
 fn fs_main(in: VertexOutput) -> FragmentOutput {
     let bgcolor = vec4f(BACKGROUND_COLOR, 1.0);
+    let firefly_clamp = vec3f(999.0);
     let max_depth = MAX_DEPTH;
     let uv = in.coords * 0.5;
 
@@ -263,7 +264,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var hit = hit_record_init();
     for (var i = 0; i < max_depth; i++) {
         if (intersect_scene_bsp(&r, &hit)) {
-            result += shade(&r, &hit, &t);
+            result += min(shade(&r, &hit, &t), firefly_clamp);
         } else {
             result += bgcolor.rgb; break;
         }
@@ -298,7 +299,7 @@ fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> 
     if (current) {
         (*hit).shader = SHADER_TYPE_TRANSPARENT;
         (*hit).ior1_over_ior2 = 1.5;
-        (*hit).extinction = vec3f(0.4, 0.1, 0.9);
+        (*hit).extinction = vec3f(2000.0, 0.0, 0.0);
     }
     has_hit = has_hit || current;
     current = intersect_trimesh(r, hit);
@@ -469,7 +470,7 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
     let blocked = intersect_scene_bsp(&ray, &hit_info);
 
     if (!blocked) {
-        diffuse = brdf * vec3f(saturate(dot(normal, light.w_i))) * light.l_i * f32(light_tris);
+        diffuse = brdf * vec3f(saturate(dot(normal, light.w_i))) * light.l_i * f32(light_tris) * (*hit).factor;
     }  
     // Add emission only during direct lighting pass 
     if ((*hit).emit) { 
@@ -477,7 +478,6 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
     }
 
     // Scale diffuse and hit factor and Russian Roulette to decide to trace more
-    diffuse = diffuse * (*hit).factor;
     (*hit).factor *=  brdf * PI;
     let prob_reflection = (brdf.r + brdf.g + brdf.b) / 3.0;
     let step = rnd(rand);
@@ -539,42 +539,77 @@ fn transparent(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<f
         // entering
         cos_thet_i = dot(w_i, -normal); 
         out_normal = -normal;
+
+        let cos_thet_t_2 = (1.0 - (ior*ior) * (1.0 - cos_thet_i * cos_thet_i));
+        var reflection_prob = 0.0;
+        if (cos_thet_t_2 < 0.0) {
+            // total internal reflection
+            reflection_prob = 1.0;
+        } else {
+            reflection_prob = fresnel_r(cos_thet_i, sqrt(cos_thet_t_2), ior);
+        }
+        let tangent = (out_normal * cos_thet_i - w_i);
+
+        let w_t = ior * tangent - (normalize(out_normal) * sqrt(cos_thet_t_2));
+        let orig = (*hit).position;
+
+        *r = ray_init(w_t, orig); 
+        (*hit).has_hit = false;
+        (*hit).emit = true;
+
+        let step = rnd(rand);
+        if (step < reflection_prob) {
+            // reflection
+            (*hit).normal = out_normal;
+            return mirror(r, hit, rand);
+        } else {
+            // transmission
+            return vec3f(0.0);
+        }
+
+
     } else {
         // exiting
         ior = 1.0 / ior;
         out_normal = normal;
-        let s = length((*hit).position - (*r).origin);
+        let s = length((*hit).position - (*r).origin) / 100.0;
         let rho_t = (*hit).extinction;
         T_r = exp(-rho_t*s);
-        absorption = 1.0 - (T_r.r + T_r.g + T_r.b) / 3.0;
-    }
-
-    let cos_thet_t_2 = (1.0 - (ior*ior) * (1.0 - cos_thet_i * cos_thet_i));
-    var reflection_prob = 0.0;
-    if (cos_thet_t_2 < 0.0) {
-        // total internal reflection
-        reflection_prob = 1.0;
-    } else {
-        reflection_prob = fresnel_r(cos_thet_i, sqrt(cos_thet_t_2), ior);
-    }
-    let tangent = (out_normal * cos_thet_i - w_i);
-    
-    let w_t = ior * tangent - (normalize(out_normal) * sqrt(cos_thet_t_2));
-    let orig = (*hit).position;
-
-    *r = ray_init(w_t, orig); 
-    (*hit).has_hit = false;
-    (*hit).emit = true;
-
-    let step = rnd(rand);
-    if (step < reflection_prob) {
-        (*hit).normal = out_normal;
-        return mirror(r, hit, rand);
-    } else {
-        let step1 = rnd(rand);
-        if (step1 < absorption) {
-            (*hit).factor *= (*hit).extinction / absorption;
+        let transmission_prob = (T_r.r + T_r.g + T_r.b) / 3.0;
+        if (transmission_prob < 0.0 || transmission_prob > 1.0) {
+            return error_shader();
         }
+        let cos_thet_t_2 = (1.0 - (ior*ior) * (1.0 - cos_thet_i * cos_thet_i));
+        var reflection_prob = 0.0;
+        if (cos_thet_t_2 < 0.0) {
+            // total internal reflection
+            reflection_prob = 1.0;
+        } else {
+            reflection_prob = fresnel_r(cos_thet_i, sqrt(cos_thet_t_2), ior);
+        }
+        let tangent = (out_normal * cos_thet_i - w_i);
+        let absorption_prob = 1.0 - reflection_prob - transmission_prob;
+
+        let w_t = ior * tangent - (normalize(out_normal) * sqrt(cos_thet_t_2));
+        let orig = (*hit).position;
+
+        *r = ray_init(w_t, orig); 
+        (*hit).has_hit = false;
+        (*hit).emit = true;
+
+        let step = rnd(rand);
+        if (step < reflection_prob) {
+            // reflection
+            (*hit).normal = out_normal;
+            return mirror(r, hit, rand);
+        }
+        else if (step < reflection_prob + transmission_prob) {
+            // transmission
+            (*hit).factor = (*hit).factor * T_r / (reflection_prob + transmission_prob);
+            return vec3f(0.0);
+        }
+        // absorption
+        (*hit).has_hit = true;
         return vec3f(0.0);
     }
 }
