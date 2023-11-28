@@ -254,10 +254,12 @@ fn sample_area_light(pos: vec3f, idx: u32) -> Light {
     let light_mat = materials[light_triangle.w];
     let l_e = light_mat.ambient.xyz;
     let center = (v0 + v1 + v2) / 3.0;
+    let normal = normalize(cross((v0 - v1), (v0 - v2)));
 
     let light_direction = center - pos;
+    let cos_l = dot(normalize(-light_direction), normal);
     let distance = sqrt(dot(light_direction, light_direction));
-    let light_intensity = l_e * area;
+    let light_intensity = (l_e * area) * cos_l; // / (distance * distance);
     var light = light_init();
     light.l_i = light_intensity;
     light.w_i = normalize(light_direction);
@@ -303,12 +305,19 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     var diffuse = vec3f(0.0);
 
     let light_tris = arrayLength(&lightIndices);
-    for (var idx = 0u; idx < light_tris; idx++) {
+    for (var idx = 1u; idx < light_tris; idx++) {
         let light = sample_area_light(hit_record.position, idx);
 
-        diffuse = diffuse + bdrf * light_diffuse_contribution(light, normal);
+        let ray_dir = light.w_i;
+        let ray_orig = hit_record.position + normal * ETA * 10.0;
+        var ray = ray_init(ray_dir, ray_orig);
+        ray.tmax = light.dist - ETA * 1000.0;
+
+        let blocked = intersect_scene_loop(&ray, hit);
+        if (!blocked) {
+            diffuse = diffuse + bdrf * light_diffuse_contribution(light, normal);
+        }
     }
-    let blocked = false;
     let ambient = material.ambient.rgb;
 
     return diffuse_and_ambient(diffuse, ambient);
