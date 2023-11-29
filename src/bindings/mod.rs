@@ -1,6 +1,7 @@
 use std::{fs::File, path::Path, io::prelude::*};
 
 pub mod bsp_tree;
+pub mod bvh;
 pub mod mesh;
 pub mod storage_mesh;
 pub mod texture;

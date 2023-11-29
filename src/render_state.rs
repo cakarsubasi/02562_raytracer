@@ -1,3 +1,4 @@
+use crate::bindings::bsp_tree::TraversalStructure;
 use crate::bindings::create_bind_group_layouts;
 use crate::bindings::storage_mesh::StorageMeshGpu;
 use crate::bindings::texture::{RenderSource, TextureInfo};
@@ -6,7 +7,6 @@ use crate::mesh::Mesh;
 use crate::SceneDescriptor;
 use crate::{
     bindings::{
-        bsp_tree::BspTreeGpu,
         create_bind_groups, create_shader_definitions,
         mesh::MeshGpu,
         texture::{RenderDestination, Texture},
@@ -47,7 +47,7 @@ pub struct RenderState {
     pub uniform: UniformGpu,
     textures: Vec<Texture>,
     mesh_handle: Option<StorageMeshGpu>,
-    bsp_tree_handle: Option<BspTreeGpu>,
+    bsp_tree_handle: TraversalStructure,
     bind_groups: Vec<wgpu::BindGroup>,
     camera_controller: CameraController,
 }
@@ -171,7 +171,7 @@ impl RenderState {
         UniformGpu,
         Vec<Texture>,
         Option<StorageMeshGpu>,
-        Option<BspTreeGpu>,
+        TraversalStructure,
     )> {
         // Uniform variables
         let uniform = UniformGpu::new(&device);
@@ -212,18 +212,20 @@ impl RenderState {
             crate::scenes::VertexType::Combined => Some(m.into_gpu_combined(&device)),
         });
         // create and load the BSP
+        // TODO: allow BVHs
         let bsp_tree = model.as_ref().and_then(|m| Some(m.bsp_tree()));
         let bsp_tree_handle = bsp_tree.and_then(|b| Some(b.into_gpu(&device)));
-
+        let bsp_tree_handle = match bsp_tree_handle {
+            Some(handle) => TraversalStructure::Bsp(handle),
+            None => TraversalStructure::None,
+        };
         // generate bind group layouts
         let handles = [
             Some(&uniform as &dyn Bindable),
             mesh_handle
                 .as_ref()
                 .and_then(|mesh| Some(mesh as &dyn Bindable)),
-            bsp_tree_handle
-                .as_ref()
-                .and_then(|bsp| Some(bsp as &dyn Bindable)),
+            Some(&bsp_tree_handle as &dyn Bindable),
             Some(render_destination as &dyn Bindable),
         ]
         .into_iter()
@@ -266,9 +268,7 @@ impl RenderState {
             self.mesh_handle
                 .as_ref()
                 .and_then(|mesh| Some(mesh as &dyn Bindable)),
-            self.bsp_tree_handle
-                .as_ref()
-                .and_then(|bsp| Some(bsp as &dyn Bindable)),
+            Some(&self.bsp_tree_handle as &dyn Bindable),
             Some(&self.render_destination as &dyn Bindable),
         ]
         .into_iter()

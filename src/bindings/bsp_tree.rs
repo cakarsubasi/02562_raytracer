@@ -2,7 +2,39 @@ use wgpu::util::DeviceExt;
 
 use crate::{data_structures::bsp_tree::{BspTreeIntermediate, BspTree}, bindings::WgslBindDescriptor};
 
-use super::{Bindable, IntoGpu, WgslSource};
+use super::{Bindable, IntoGpu, WgslSource, bvh::BvhGpu};
+
+pub enum TraversalStructure {
+    Bsp(BspTreeGpu),
+    Bvh(BvhGpu),
+    None,
+}
+
+impl Bindable for TraversalStructure {
+    fn get_layout_entries(&self) -> Vec<wgpu::BindGroupLayoutEntry> {
+        match self {
+            TraversalStructure::Bsp(bsp_tree) => bsp_tree.get_layout_entries(),
+            TraversalStructure::Bvh(bvh) => bvh.get_layout_entries(),
+            TraversalStructure::None => vec![],
+        }
+    }
+
+    fn get_bind_group_entries(&self) -> Vec<wgpu::BindGroupEntry> {
+        match self {
+            TraversalStructure::Bsp(bsp_tree) => bsp_tree.get_bind_group_entries(),
+            TraversalStructure::Bvh(bvh) => bvh.get_bind_group_entries(),
+            TraversalStructure::None => vec![],
+        }
+    }
+
+    fn get_bind_descriptor(&self) -> Vec<WgslBindDescriptor> {
+        match self {
+            TraversalStructure::Bsp(bsp_tree) => bsp_tree.get_bind_descriptor(),
+            TraversalStructure::Bvh(bvh) => bvh.get_bind_descriptor(),
+            TraversalStructure::None => vec![],
+        }
+    }
+}
 
 pub struct BspTreeGpu {
     // need to hold intermediates so they don't get dropped
