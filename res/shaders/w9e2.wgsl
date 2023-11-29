@@ -288,7 +288,7 @@ fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> 
     var current = false;
     current = intersect_trimesh(r, hit);
     if (current) {
-        (*hit).shader = uniforms.selection1;
+        (*hit).shader = SHADER_TYPE_BASECOLOR;
     }
     has_hit = has_hit || current;
     return has_hit;
