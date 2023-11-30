@@ -461,32 +461,32 @@ fn glossy(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<functi
 }
 
 fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f { 
-    let hit_record = *hit;
-    let ray = *r;
-
-    let specular = hit_record.specular;
-    let s = hit_record.shininess;
-    let normal = hit_record.normal;
-
-    let w_i = ray.direction;
-    let w_o = normalize(uniforms.camera_pos - hit_record.position); // view direction
-    let w_r = reflect(-w_i, normal);
-
-    //let light = sample_point_light(hit_record.position);
-    let light_tris = arrayLength(&lightIndices);
-    var phong_total = vec3f(0.0);
-    for (var idx = 1u; idx < light_tris; idx++) {
-        let light = sample_area_light(hit_record.position, idx, rand);
-        let light_dir = light.w_i;
-        let light_intensity = light.l_i;
-        let refl_dir = normalize(reflect(-light_dir, normal));
-
-        phong_total += pow(saturate(dot(w_o, refl_dir)), s);
-    }
+    let specular = (*hit).specular;
+    let s = (*hit).shininess;
+    let normal = (*hit).normal;
+    let position = (*hit).position;
 
     let coeff = specular * (s + 2.0) / (2.0 * PI);
 
-    return coeff * phong_total * vec3f(1.0);
+    let w_o = normalize(uniforms.camera_pos - position); // view direction
+
+    let light_tris = arrayLength(&lightIndices);
+    var phong_total = vec3f(0.0);
+    for (var idx = 1u; idx < light_tris; idx++) {
+        let light = sample_area_light((*hit).position, idx, rand);
+        let light_dir = light.w_i;
+        let light_intensity = light.l_i;
+        let light_dist = light.dist;
+
+        let w_r = normalize(reflect(-light.w_i, normal));
+        let diffuse = saturate(vec3f(dot(normal, light.w_i))) * light.l_i / PI;
+        let w_o_dot_w_r = dot(w_o, w_r);
+
+        phong_total += pow(saturate(w_o_dot_w_r), s) * diffuse / (light_dist * light_dist);
+    }
+
+    let phong_overall = coeff * phong_total;
+    return vec3f(phong_overall);
 }
 
 fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f {

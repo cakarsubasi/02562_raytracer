@@ -448,27 +448,20 @@ fn glossy(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 }
 
 fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    let hit_record = *hit;
-    let ray = *r;
+    let specular = (*hit).shader.specular;
+    let s = (*hit).shader.shininess;
+    let normal = (*hit).normal;
+    let position = (*hit).position;
 
-    let specular = hit_record.shader.specular;
-    let s = hit_record.shader.shininess;
-    let normal = hit_record.normal;
+    let w_o = normalize(uniforms.camera_pos - position); // view direction
+    let light = sample_point_light(position);
+    let w_r = normalize(reflect(-light.w_i, normal));
+    let diffuse = saturate(vec3f(dot(normal, light.w_i))) * light.l_i / PI;
+    let w_o_dot_w_r = dot(w_o, w_r);
+    let coeff = specular * (s + 2.0) / (2.0 * PI);
 
-    let w_i = normalize(ray.direction);
-    let w_r = reflect(-w_i, normal);
-    let w_o = normalize(uniforms.camera_pos - hit_record.position); // view direction
-
-    let light = sample_point_light(hit_record.position);
-    let light_dir = light.w_i;
-    let light_intensity = light.l_i;
-    let refl_dir = normalize(reflect(-light_dir, normal));
-    let other_factor = saturate(dot(light_dir, normal));
-
-    let coeff = other_factor * specular * (s + 2.0) / (2.0 * PI);
-    let phong_total = pow(saturate(dot(w_o, refl_dir)), s);
-
-    return light_intensity * coeff * phong_total * vec3f(1.0);
+    let phong_overall = coeff * pow(saturate(w_o_dot_w_r), s) * diffuse;
+    return vec3f(phong_overall);
 }
 
 fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
