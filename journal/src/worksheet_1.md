@@ -1,10 +1,10 @@
-# The Basics
+## Worksheet 1 - The Basics
 
 As I have chosen to do this project in Rust instead of Javascript, this section will differ the strongest from the prescribed exercises. 
 
-In addition, Rust requires a much more significant amount of "boilerplate" code to manage windows, UI, and hardware access as we do not have a browser and a DOM to take care of difficult parts for us. This would also make it considerably more difficult to provide a full copy of the code for each section as that would get out of control quickly. So I ended up having to implement a lot of nominally unnecessary features  
+In addition, Rust requires a much more significant amount of "boilerplate" code to manage windows, UI, and hardware access as we do not have a browser and a DOM to take care of difficult parts for us. This would also make it considerably more difficult to provide a full copy of the code for each section as that would get out of control quickly. So I ended up having to implement a lot of nominally unnecessary features for this project. To future students taking this class, I would generally advise against doing it in Rust since they will end up working on many areas that are not strictly related to computer graphics, although if they are fine with the extra work, there is nothing wrong with using Rust.
 
-# 1. Drawing to a Window, Clearing the Background
+### 1. Drawing to a Window, Clearing the Background
 
 Done, need images, need tag
 
@@ -14,7 +14,7 @@ Winit also supports the browser however things became very complicated fairly qu
 
 ![](./img/w1_e1.png)
 
-# 2. Drawing a Rectangle
+### 2. Drawing a Rectangle
 
 Technically I am cheating a bit here as I did not abstract the vertex buffer creation to allow different canvases. However, it is trivial to achieve a similar effect by just scaling the canvas in the vertex shader instead:
 
@@ -26,7 +26,7 @@ out.clip_position = vec4<f32>(model.position * 0.9, 1.0);
 
 ![](./img/w1_e2.png)
 
-# 3. UV Coordinates as pixel color
+### 3. UV Coordinates as pixel color
 
 Camera properties are passed as uniform variables as part of a single struct.
 
@@ -91,14 +91,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 ![](./img/w1_e3.png)
 
-# 4. Default scene
+### 4. Default scene
 
 Besides the intersection functions, nothing exciting is added despite us now doing "ray tracing".
 
 
 ![](./img/w1_e4.png)
 
-# 5. Uniform variables, Zoom and Aspect Ratio
+### 5. Uniform variables, Zoom and Aspect Ratio
 
 Uniform variable support was already described in 1.3. 
 
@@ -132,7 +132,7 @@ Or stretch it:
 ![](./img/w1_e5_stretched.png)
 
 
-# 6. Basic shading
+### 6. Basic shading
 
 Shading requires no further engine support. The position of the light source just like other objects is hard coded in the shader.
 
