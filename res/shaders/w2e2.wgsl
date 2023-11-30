@@ -283,13 +283,11 @@ fn sample_point_light(pos: vec3f) -> Light {
 }
 
 fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    var hit_record = *hit;
     var color = vec3f(0.0, 0.0, 0.0);
-    hit_record.has_hit = true;
-    hit_record.depth += 1;
-    *hit = hit_record;
+    (*hit).has_hit = true;
+    (*hit).depth += 1;
 
-    switch(hit_record.shader.shader) {
+    switch((*hit).shader.shader) {
         case 0u: {
             color = lambertian(r, hit);
         }
@@ -347,19 +345,14 @@ fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
 } 
 
 fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    var hit_record = *hit;
-    
-    let normal = hit_record.normal;
+    let normal = (*hit).normal;
     let ray_dir = reflect((*r).direction, normal);
-    let ray_orig = hit_record.position + normal * ETA;
+    let ray_orig = (*hit).position;
     *r = ray_init(ray_dir, ray_orig);
 
-    hit_record.has_hit = false;
+    (*hit).has_hit = false;
 
-    *hit = hit_record;
-
-    return vec3f(0.0, 0.0, 0.0);
-
+    return vec3f(0.0);
 }
 
 fn shade_normal(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {

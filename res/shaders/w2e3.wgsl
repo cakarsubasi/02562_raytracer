@@ -290,13 +290,12 @@ fn sample_point_light(pos: vec3f) -> Light {
 }
 
 fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    var hit_record = *hit;
     var color = vec3f(0.0, 0.0, 0.0);
-    hit_record.has_hit = true;
-    hit_record.depth += 1;
-    *hit = hit_record;
+    (*hit).has_hit = true;
+    (*hit).depth += 1;
 
-    switch(hit_record.shader.shader) {
+
+    switch((*hit).shader.shader) {
         case 0u: {
             color = lambertian(r, hit);
         }
@@ -373,13 +372,11 @@ fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 }
 
 fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    var hit_record = *hit;
-    let ray = *r;
-    let w_i = -normalize(ray.direction);
-    let normal = normalize(hit_record.normal);
+    let w_i = -normalize((*r).direction);
+    let normal = normalize((*hit).normal);
     var out_normal = vec3f(0.0);
 
-    var ior = hit_record.shader.ior1_over_ior2;
+    var ior = (*hit).shader.ior1_over_ior2;
     // figure out if we are inside or outside
     let cos_thet_i = dot(w_i, normal);
     // normals point outward, so if this is positive
@@ -401,12 +398,11 @@ fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     let tangent = ((normal * cos_thet_i - w_i));
     
     let w_t = ior * tangent - (out_normal * sqrt(cos_thet_t_2));
-    let orig = hit_record.position + w_t * ETA;
+    let orig = (*hit).position;
 
     *r = ray_init(w_t, orig); 
-    hit_record.has_hit = false;
+    (*hit).has_hit = false;
 
-    *hit = hit_record;
     return vec3f(0.0, 0.0, 0.0);
 }
 
