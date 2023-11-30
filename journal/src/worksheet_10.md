@@ -2,7 +2,7 @@
 
 # 1. Sphere and Cube
 
-Not done.
+Done.
 
 # 2. Principled BSDF
 

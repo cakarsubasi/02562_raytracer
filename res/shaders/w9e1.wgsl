@@ -67,7 +67,7 @@ struct Light {
 fn light_init() -> Light {
     return Light(
         vec3f(0.0),
-        vec3f(0.0),
+        vec3f(0.0, 1.0, 0.0),
         999999.0,
     );
 }
@@ -229,8 +229,7 @@ fn get_camera_ray(uv: vec2f, jitter: vec2f) -> Ray {
     return ray;
 }
 
-fn environment_map(r: ptr<function, Ray>) -> vec3f {
-    let direction = (*r).direction;
+fn environment_map(direction: vec3f) -> vec3f {
     let d_x = direction.x;
     let d_y = direction.y;
     let d_z = direction.z;
@@ -262,7 +261,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         if (intersect_scene_bsp(&r, &hit)) {
             result += shade(&r, &hit, &t);
         } else {
-            result += environment_map(&r); break;
+            result += environment_map(r.direction) * hit.factor; break;
         }
 
         if (hit.has_hit) {
@@ -302,9 +301,9 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
     let v0 = combinedBuffer[v0_i].position.xyz;
     let v1 = combinedBuffer[v1_i].position.xyz;
     let v2 = combinedBuffer[v2_i].position.xyz;
-    //let n0 = combinedBuffer[v0_i].normal.xyz;
-    //let n1 = combinedBuffer[v1_i].normal.xyz; 
-    //let n2 = combinedBuffer[v2_i].normal.xyz;
+    let n0 = combinedBuffer[v0_i].normal.xyz;
+    let n1 = combinedBuffer[v1_i].normal.xyz; 
+    let n2 = combinedBuffer[v2_i].normal.xyz;
 
     let ray = *r;
     let w_i = ray.direction;
@@ -320,10 +319,6 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
     if (abs(denom) < 1e-10) {
         return false;
     }
-
-    let n0 = normal; // Our box does not have vertex normals, so we have to use this
-    let n1 = normal; // 
-    let n2 = normal; // 
 
     let beta = dot(nom, e1) / (denom);
     let gamma = -dot(nom, e0) / (denom);
@@ -438,10 +433,8 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
 
     let normal = (*hit).normal;
 
-    // Pick a random area light to sample
-    let light_tris = arrayLength(&lightIndices) - 1u;
-    let idx = (rnd_int(rand) % light_tris) + 1u;
-    let light = sample_area_light((*hit).position, idx, rand);
+    // There is no direct light source, so just create a dummy light
+    let light = light_init();
 
     // Trace shadow rays to area light
     let ray_dir = light.w_i;
@@ -454,7 +447,7 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
     let blocked = intersect_scene_bsp(&ray, &hit_info);
 
     if (!blocked) {
-        diffuse = brdf * vec3f(saturate(dot(normal, light.w_i))) * light.l_i * f32(light_tris);
+        diffuse = brdf * vec3f(saturate(dot(normal, light.w_i))) * light.l_i;
     }  
     // Add emission only during direct lighting pass 
     if ((*hit).emit) { 

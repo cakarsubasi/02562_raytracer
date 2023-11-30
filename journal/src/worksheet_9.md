@@ -3,13 +3,13 @@
 
 # 1. SDR Pixar Campus
 
-Not done, CPU part done.
+Done.
 
 To support environment mapping, we need to extend the rendering framework to support multiple textures.
 
 # 2. HDR Pixar Campus
 
-Not done.
+Done.
 
 # 3. Directional Light
 
