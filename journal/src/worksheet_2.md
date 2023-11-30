@@ -169,9 +169,28 @@ fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 
 ### 4. Phong reflection
 
-I could not get the Phong reflection to work quite right. 
+And the phong reflection model. This one I actually got wrong for the longest time until I eventually sat down and wrote it correctly. The worst part was retaking all of the screenshots really.
 
-![](./img/w2_e4_buggy_phong.png)
+```rs
+fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
+    let specular = (*hit).shader.specular;
+    let s = (*hit).shader.shininess;
+    let normal = (*hit).normal;
+    let position = (*hit).position;
+
+    let w_o = normalize(uniforms.camera_pos - position); // view direction
+    let light = sample_point_light(position);
+    let w_r = normalize(reflect(-light.w_i, normal));
+    let diffuse = saturate(vec3f(dot(normal, light.w_i))) * light.l_i / PI;
+    let w_o_dot_w_r = dot(w_o, w_r);
+    let coeff = specular * (s + 2.0) / (2.0 * PI);
+
+    let phong_overall = coeff * pow(saturate(w_o_dot_w_r), s) * diffuse;
+    return vec3f(phong_overall);
+}
+```
+
+![](./img/w2_e4_phong.png)
 
 
 ### 5. Glossy shader
@@ -184,4 +203,4 @@ fn glossy(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 }
 ```
 
-![](./img/w2_e5_buggy_glossy.png)
+![](./img/w2_e5_glossy.png)
