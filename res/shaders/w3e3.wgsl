@@ -167,10 +167,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var result = vec3f(0.0);
     var textured = vec3f(0.0);
-    // each loop is one bounce
     for (var sample = 0u; sample < subdiv * subdiv; sample++) {
         var r = get_camera_ray(uv, sample);
         var hit = hit_record_init();
+        // each loop is one bounce
         for (var i = 0; i < max_depth; i++) {
             if (intersect_scene(&r, &hit)) {
                 if (hit.shader.use_texture) {

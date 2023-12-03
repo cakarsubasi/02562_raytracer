@@ -237,15 +237,14 @@ struct Onb {
 const plane_onb = Onb(vec3f(-1.0, 0.0, 0.0), vec3f(0.0, 0.0, 1.0), vec3f(0.0, 1.0, 0.0));
 
 fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, plane: Onb, position: vec3f) -> bool {
-    let ray = *r;
     let normal = plane_onb.normal;
-    let distance = dot((position - ray.origin), normal)/(dot(ray.direction, normal));
-    if (distance < ray.tmin || distance > ray.tmax) {
+    let distance = dot((position - (*r).origin), normal)/(dot((*r).direction, normal));
+    if (distance < (*r).tmin || distance > (*r).tmax) {
         return false;
     }
     (*r).tmax = distance;
     (*hit).dist = distance;
-    let pos = ray_at(ray, distance);
+    let pos = ray_at((*r), distance);
     (*hit).position = pos;
     (*hit).normal = normal;
 

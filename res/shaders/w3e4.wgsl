@@ -164,13 +164,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let uv = in.coords * 0.5;
     let subdiv = uniforms.subdivision_level;
 
-
     var result = vec3f(0.0);
     var textured = vec3f(0.0);
-    // each loop is one bounce
     for (var sample = 0u; sample < subdiv * subdiv; sample++) {
         var r = get_camera_ray(uv, sample);
         var hit = hit_record_init();
+        // each loop is one bounce
         for (var i = 0; i < max_depth; i++) {
             if (intersect_scene(&r, &hit)) {
                 if (hit.shader.use_texture) {
@@ -209,7 +208,7 @@ fn texture_sample(hit: ptr<function, HitRecord>) -> vec3f {
             result = textureSample(texture0, sampler0_nearest, uv0_scaled).xyz;
         }
         default: {
-
+            // no texture
         }
     }
     return result;
