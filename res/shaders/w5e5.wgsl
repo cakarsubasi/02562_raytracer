@@ -1,5 +1,5 @@
 const PI = 3.14159265359;
-const ETA = 0.00001;
+const ETA = 0.001;
 
 const BACKGROUND_COLOR: vec3f = vec3f(0.0, 0.0, 0.5);
 
@@ -259,7 +259,7 @@ fn sample_area_light(pos: vec3f, idx: u32) -> Light {
     let light_direction = center - pos;
     let cos_l = dot(normalize(-light_direction), normal);
     let distance = sqrt(dot(light_direction, light_direction));
-    let light_intensity = (l_e * area) * cos_l; // / (distance * distance);
+    let light_intensity = (l_e * area) * cos_l / (distance * distance);
     var light = light_init();
     light.l_i = light_intensity;
     light.w_i = normalize(light_direction);
@@ -268,19 +268,13 @@ fn sample_area_light(pos: vec3f, idx: u32) -> Light {
 }
 
 fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    var hit_record = *hit;
     var color = vec3f(0.0, 0.0, 0.0);
-    hit_record.has_hit = true;
-    hit_record.depth += 1;
-    *hit = hit_record;
+    (*hit).has_hit = true;
+    (*hit).depth += 1;
 
-    switch(hit_record.shader) {
+    switch((*hit).shader) {
         case 0u: {
             color = lambertian(r, hit);
-        }
-
-        case 2u: {
-            color = mirror(r, hit);
         }
 
         case 5u: {
@@ -297,58 +291,30 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 }
 
 fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    var hit_record = *hit;
-    let normal = hit_record.normal;
+    let normal = (*hit).normal;
     let material = get_material(hit);
     let bdrf = material.diffuse.rgb;
     
     var diffuse = vec3f(0.0);
 
     let light_tris = arrayLength(&lightIndices);
+    var hit_record = hit_record_init();
     for (var idx = 1u; idx < light_tris; idx++) {
-        let light = sample_area_light(hit_record.position, idx);
+        let light = sample_area_light((*hit).position, idx);
 
         let ray_dir = light.w_i;
-        let ray_orig = hit_record.position + normal * ETA * 10.0;
+        let ray_orig = (*hit).position;
         var ray = ray_init(ray_dir, ray_orig);
-        ray.tmax = light.dist - ETA * 1000.0;
+        ray.tmax = light.dist - ETA;
 
-        let blocked = intersect_scene_loop(&ray, hit);
+        let blocked = intersect_scene_loop(&ray, &hit_record);
         if (!blocked) {
-            diffuse = diffuse + bdrf * light_diffuse_contribution(light, normal);
+            diffuse += bdrf * vec3f(dot(normal, light.w_i)) * light.l_i / PI;
         }
     }
     let ambient = material.ambient.rgb;
 
-    return diffuse_and_ambient(diffuse, ambient);
-}
-
-fn light_diffuse_contribution(light: Light, normal: vec3f) -> vec3f {
-    var diffuse = vec3f(dot(normal, light.w_i));
-    diffuse = diffuse / (light.dist * light.dist);
-    diffuse *= light.l_i;
-    diffuse = diffuse / PI;
-    return diffuse;
-}
-
-fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
-    return 0.9 * diffuse + 0.1 * ambient;
-} 
-
-fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    var hit_record = *hit;
-    
-    let normal = hit_record.normal;
-    let ray_dir = reflect((*r).direction, normal);
-    let ray_orig = hit_record.position + normal * ETA;
-    *r = ray_init(ray_dir, ray_orig);
-
-    hit_record.has_hit = false;
-
-    *hit = hit_record;
-
-    return vec3f(0.0, 0.0, 0.0);
-
+    return diffuse + ambient;
 }
 
 

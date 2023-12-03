@@ -18,24 +18,6 @@ const SHADER_TYPE_DEFAULT: u32 = 0u;
 
 const MAX_DEPTH: i32 = 10;
 
-//@group(0) @binding(1)
-//var<uniform> selection: u32;
-// Stratified jitter sampling array TODO
-//@group(0) @binding(2)
-//var<storage> jitter: array<vec2f>;
-
-//@group(1) @binding(0)
-//var sampler0: sampler;
-//@group(1) @binding(1)
-//var texture0: texture_2d<f32>;
-
-// GPU will always align to 16, so this does not waste space
-//@group(2) @binding(0)
-//var<storage> vertexBuffer: array<vec4f>;
-//// GPU will always align to 16, so this does not waste space
-//@group(2) @binding(1)
-//var<storage> indexBuffer: array<vec4u>;
-
 struct VertexInput {
     @location(0) position: vec3<f32>,
 };
@@ -226,11 +208,9 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
 }
 
 fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    var hit_record = *hit;
     var color = vec3f(0.0, 0.0, 0.0);
-    hit_record.has_hit = true;
-    hit_record.depth += 1;
-    *hit = hit_record;
+    (*hit).has_hit = true;
+    (*hit).depth += 1;
 
     let index = (*hit).material;
     color = materials[index].diffuse.xyz + materials[index].ambient.xyz;

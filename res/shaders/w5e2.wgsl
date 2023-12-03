@@ -295,7 +295,7 @@ fn sample_directional_light(pos: vec3f) -> Light {
     // is independent of the distance
     let light_direction = -normalize(vec3f(-1.0));
     let light_intensity = 5.0 * vec3f(PI, PI, PI);
-    let distance = 1.0e+10;
+    let distance = 1.0;
     var light = light_init();
     light.l_i = light_intensity;
     light.dist = distance;
