@@ -177,8 +177,8 @@ fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: a
         return false;
     }
 
-    let beta = dot(nom, e1) / (denom);
-    let gamma = -dot(nom, e0) / (denom);
+    let beta = dot(nom, e1) / denom;
+    let gamma = -dot(nom, e0) / denom;
     let distance = dot(o_to_v0, normal) / denom;
     if (beta < 0.0 || gamma < 0.0 || beta + gamma > 1.0 || distance > ray.tmax || distance < ray.tmin) {
         return false;

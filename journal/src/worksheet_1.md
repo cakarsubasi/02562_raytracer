@@ -98,6 +98,85 @@ Besides the intersection functions, nothing exciting is added despite us now doi
 
 ![](./img/w1_e4.png)
 
+The intersection functions look as follows:
+
+```rs
+fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, normal: vec3f, position: vec3f) -> bool {
+    let ray = *r;
+    let distance = dot((position - ray.origin), normal)/(dot(ray.direction, normal));
+    if (distance < ray.tmin || distance > ray.tmax) {
+        return false;
+    }
+    (*r).tmax = distance;
+    (*hit).dist = distance;
+    let pos = ray_at(ray, distance);
+    (*hit).position = pos;
+    (*hit).normal = normal;
+
+    return true;
+}
+
+fn intersect_triangle(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, v: array<vec3f, 3>) -> bool {
+    let ray = *r;
+    let w_i = ray.direction;
+    let o = ray.origin;
+
+    let e0 = v[1] - v[0];
+    let e1 = v[2] - v[0];
+    let o_to_v0 = v[0] - o;
+    let normal = cross(e0, e1);
+
+    let nom = cross(o_to_v0, w_i);
+    var denom = dot(w_i, normal);
+    if (abs(denom) < 1e-6) {
+        return false;
+    }
+
+    let beta = dot(nom, e1) / denom;
+    let gamma = -dot(nom, e0) / denom;
+    let distance = dot(o_to_v0, normal) / denom;
+    if (beta < 0.0 || gamma < 0.0 || beta + gamma > 1.0 || distance > ray.tmax || distance < ray.tmin) {
+        return false;
+    }
+
+    (*r).tmax = distance;
+    (*hit).dist = distance;
+    let pos = ray_at(ray, distance);
+    (*hit).position = pos;
+    (*hit).normal = normalize(normal);
+
+    return true;
+}
+
+fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center: vec3f, radius: f32) -> bool {
+    let ray = *r;
+    let oc = ray.origin - center;
+    let a = dot(ray.direction, ray.direction);
+    let b_over_2 = dot(oc, ray.direction);
+    let c = dot(oc, oc) - radius * radius;
+    let discriminant = b_over_2 * b_over_2 - a * c;
+    if (discriminant < 0.0) {
+        return false;
+    }
+    let disc_sqrt = sqrt(discriminant);
+    var root = (- b_over_2 - disc_sqrt) / a;
+    if (root < ray.tmin || root > ray.tmax) {
+        root = (- b_over_2 + disc_sqrt) / a;
+        if (root < ray.tmin || root > ray.tmax) {
+            return false;
+        }
+    }
+
+    (*r).tmax = root;
+    (*hit).dist = root;
+    let pos = ray_at(ray, root);
+    let normal = normalize(pos - center);
+    (*hit).position = pos;
+    (*hit).normal = normal;
+    return true;
+}
+```
+
 ### 5. Uniform variables, Zoom and Aspect Ratio
 
 Uniform variable support was already described in 1.3. 
