@@ -307,7 +307,7 @@ fn sample_area_light(pos: vec3f, idx: u32) -> Light {
     let light_direction = center - pos;
     let cos_l = dot(normalize(-light_direction), normal);
     let distance = sqrt(dot(light_direction, light_direction));
-    let light_intensity = (l_e * area) * cos_l; // / (distance * distance);
+    let light_intensity = (l_e * area) * cos_l / (distance * distance);
     var light = light_init();
     light.l_i = light_intensity;
     light.w_i = normalize(light_direction);
@@ -352,56 +352,38 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 }
 
 fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    var hit_record = *hit;
-    let normal = hit_record.normal;
+    let normal = (*hit).normal;
     let material = get_material(hit);
     let bdrf = material.diffuse.rgb;
     
     var diffuse = vec3f(0.0);
 
     let light_tris = arrayLength(&lightIndices);
+    var hit_record = hit_record_init();
     for (var idx = 1u; idx < light_tris; idx++) {
-        let light = sample_area_light(hit_record.position, idx);
+        let light = sample_area_light((*hit).position, idx);
 
         let ray_dir = light.w_i;
-        let ray_orig = hit_record.position + normal * ETA * 100.0;
+        let ray_orig = (*hit).position;
         var ray = ray_init(ray_dir, ray_orig);
-        ray.tmax = light.dist - ETA * 1000.0;
+        ray.tmax = light.dist - ETA;
 
-        let blocked = intersect_scene_bsp(&ray, hit);
-        //let blocked = false;
+        let blocked = intersect_scene_bsp(&ray, &hit_record);
         if (!blocked) {
-            diffuse = diffuse + bdrf * light_diffuse_contribution(light, normal);
+            diffuse += bdrf * vec3f(dot(normal, light.w_i)) * light.l_i / PI;
         }
     }
-    let ambient = material.ambient.rgb + material.diffuse.rgb * 0.1;
+    let ambient = material.ambient.rgb;
 
-    return diffuse_and_ambient(diffuse, ambient);
+    return diffuse + ambient;
 }
-
-fn light_diffuse_contribution(light: Light, normal: vec3f) -> vec3f {
-    var diffuse = vec3f(dot(normal, light.w_i));
-    diffuse = diffuse / (light.dist * light.dist);
-    diffuse *= light.l_i;
-    diffuse = diffuse / PI;
-    return diffuse;
-}
-
-fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
-    return 0.9 * diffuse + 0.1 * ambient;
-} 
 
 fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f { 
-    var hit_record = *hit;
-    
-    let normal = hit_record.normal;
+    let normal = (*hit).normal;
     let ray_dir = reflect((*r).direction, normal);
-    let ray_orig = hit_record.position + normal * ETA;
+    let ray_orig = (*hit).position;
     *r = ray_init(ray_dir, ray_orig);
-
-    hit_record.has_hit = false;
-
-    *hit = hit_record;
+    (*hit).has_hit = false;
 
     return vec3f(0.0, 0.0, 0.0);
 }
@@ -433,7 +415,7 @@ fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
         let diffuse = saturate(vec3f(dot(normal, light.w_i))) * light.l_i / PI;
         let w_o_dot_w_r = dot(w_o, w_r);
 
-        phong_total += pow(saturate(w_o_dot_w_r), s) * diffuse / (light_dist * light_dist);
+        phong_total += pow(saturate(w_o_dot_w_r), s) * diffuse;
     }
 
     let phong_overall = coeff * phong_total;
@@ -441,13 +423,11 @@ fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
 }
 
 fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
-    var hit_record = *hit;
-    let ray = *r;
-    let w_i = -normalize(ray.direction);
-    let normal = normalize(hit_record.normal);
+    let w_i = -normalize((*r).direction);
+    let normal = normalize((*hit).normal);
     var out_normal = vec3f(0.0);
 
-    var ior = hit_record.ior1_over_ior2;
+    var ior = (*hit).ior1_over_ior2;
     // figure out if we are inside or outside
     let cos_thet_i = dot(w_i, normal);
     // normals point outward, so if this is positive
@@ -469,12 +449,11 @@ fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
     let tangent = ((normal * cos_thet_i - w_i));
     
     let w_t = ior * tangent - (out_normal * sqrt(cos_thet_t_2));
-    let orig = hit_record.position + w_t * ETA;
+    let orig = (*hit).position;
 
     *r = ray_init(w_t, orig); 
-    hit_record.has_hit = false;
+    (*hit).has_hit = false;
 
-    *hit = hit_record;
     return vec3f(0.0, 0.0, 0.0);
 }
 
