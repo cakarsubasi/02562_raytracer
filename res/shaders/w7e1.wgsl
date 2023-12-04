@@ -225,7 +225,6 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         }
     }
     
-    //let multiplier = 1.0 / f32(subdiv * subdiv);
     let curr_sum = textureLoad(renderTexture, vec2u(in.clip_position.xy), 0).rgb*f32(uniforms.iteration);
     let accum_color = (result + curr_sum)/f32(uniforms.iteration + 1u);
 

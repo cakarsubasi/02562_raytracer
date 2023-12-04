@@ -340,13 +340,12 @@ fn sample_area_light(pos: vec3f, idx: u32, rand: ptr<function, u32>) -> Light {
     let gamma = psi2 * psi1;
     let normal = normalize(cross((v0 - v1), (v0 - v2)));
 
-
     let sampled_point = (v0 * alpha + v1 * beta + v2 * gamma);
 
     let light_direction = sampled_point - pos;
     let cos_l = dot(normalize(-light_direction), normal);
     let distance = sqrt(dot(light_direction, light_direction));
-    let light_intensity = (l_e * area) * cos_l; // / (distance * distance);
+    let light_intensity = (l_e * area) * cos_l / (distance * distance);
     var light = light_init();
     light.l_i = light_intensity;
     light.w_i = normalize(light_direction);
@@ -391,45 +390,38 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<functio
 }
 
 fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f { 
-    var hit_record = *hit;
-    let normal = hit_record.normal;
+    let normal = (*hit).normal;
     let material = get_material(hit);
     let bdrf = material.diffuse.rgb;
     
     var diffuse = vec3f(0.0);
 
     let light_tris = arrayLength(&lightIndices);
+    var hit_record = hit_record_init();
     for (var idx = 1u; idx < light_tris; idx++) {
-        let light = sample_area_light(hit_record.position, idx, rand);
+        let light = sample_area_light((*hit).position, idx, rand);
 
         let ray_dir = light.w_i;
-        let ray_orig = hit_record.position + light.w_i * ETA;
+        let ray_orig = (*hit).position;
         var ray = ray_init(ray_dir, ray_orig);
-        ray.tmax = light.dist - ETA * 10.0;
-        ray.tmin = ETA * 1.0;
+        ray.tmax = light.dist - ETA;
 
-        let blocked = intersect_scene_bsp(&ray, hit);
-        //let blocked = false;
+        let blocked = intersect_scene_bsp(&ray, &hit_record);
         if (!blocked) {
-            diffuse = diffuse + bdrf * light_diffuse_contribution(light, normal);
+            diffuse += bdrf * vec3f(dot(normal, light.w_i)) * light.l_i / PI;
         }
     }
-    let ambient = material.ambient.rgb + material.diffuse.rgb * 0.1;
+    let ambient = material.ambient.rgb;
 
-    return diffuse_and_ambient(diffuse, ambient);
+    return diffuse + ambient;
 }
 
 fn light_diffuse_contribution(light: Light, normal: vec3f) -> vec3f {
     var diffuse = vec3f(dot(normal, light.w_i));
-    diffuse = diffuse / (light.dist * light.dist);
     diffuse *= light.l_i;
     diffuse = diffuse / PI;
     return diffuse;
 }
-
-fn diffuse_and_ambient(diffuse: vec3f, ambient: vec3f) -> vec3f {
-    return 0.9 * diffuse + 0.1 * ambient;
-} 
 
 fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f { 
     var hit_record = *hit;
@@ -472,7 +464,7 @@ fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<functio
         let diffuse = saturate(vec3f(dot(normal, light.w_i))) * light.l_i / PI;
         let w_o_dot_w_r = dot(w_o, w_r);
 
-        phong_total += pow(saturate(w_o_dot_w_r), s) * diffuse / (light_dist * light_dist);
+        phong_total += pow(saturate(w_o_dot_w_r), s) * diffuse;
     }
 
     let phong_overall = coeff * phong_total;

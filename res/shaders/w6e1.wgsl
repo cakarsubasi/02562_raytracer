@@ -81,15 +81,11 @@ fn light_init() -> Light {
 
 struct HitRecord {
     has_hit: bool,
+    material: u32,
     depth: i32,
     dist: f32,
     position: vec3f,
     normal: vec3f,
-    // color contribution
-    ambient: vec3f,
-    diffuse: vec3f,
-    uv0: vec2f,
-    material: u32,
     // shader properties
     shader: ShaderType,
 };
@@ -97,15 +93,11 @@ struct HitRecord {
 fn hit_record_init() -> HitRecord {
     return HitRecord(
         false,
+        0u,
         0,
         0.0, 
         vec3f(0.0), 
         vec3f(0.0),
-        // color contribution
-        vec3f(0.0),
-        vec3f(0.0),
-        vec2f(0.0),
-        0u,
         // shader properties
         SHADER_TYPE_NO_RENDER,
     );
