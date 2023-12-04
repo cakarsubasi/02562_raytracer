@@ -456,7 +456,7 @@ fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
         let diffuse = saturate(vec3f(dot(normal, light.w_i))) * light.l_i / PI;
         let w_o_dot_w_r = dot(w_o, w_r);
 
-        phong_total += pow(saturate(w_o_dot_w_r), s) * diffuse;
+        phong_total += pow(saturate(w_o_dot_w_r), s) * diffuse; // Here is a change
     }
 
     let phong_overall = coeff * phong_total;

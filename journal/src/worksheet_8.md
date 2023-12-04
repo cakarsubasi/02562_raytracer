@@ -5,10 +5,23 @@
 
 Done.
 
+![](./img/w8_e1_one_sample.png)
+
+![](./img/w8_e1.png)
+
 # 2. Indirect illumination
 
-Done.
+![](./img/w8_e2_one_sample.png)
+
+![](./img/w8_e2.png)
+
 
 # 3. Absorption
 
-Partially done.
+![](./img/w8_e3_bad.png)
+
+![](./img/w8_e3_better.png)
+
+Correctness?
+
+![](./img/w8_e3_one_sample.png)
