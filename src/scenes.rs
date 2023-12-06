@@ -369,5 +369,14 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             vertex_type: VertexType::Combined,
             background_hdri: Some(campus_background_hdr_path.clone()),
         },
+        SceneDescriptor {
+            name: String::from("W9 E3 Teapot"),
+            shader: PathBuf::from("res/shaders/w9e3.wgsl"),
+            model: Some(teapot_path.clone()),
+            camera: utah_teapot_camera.clone(),
+            res: (800, 450),
+            vertex_type: VertexType::Combined,
+            background_hdri: Some(campus_background_path.clone()),
+        },
     ])
 }
