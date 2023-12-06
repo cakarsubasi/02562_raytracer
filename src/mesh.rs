@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Copy, Clone, Debug, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct Material {
     pub diffuse: Vec4f32,
@@ -100,6 +100,7 @@ impl Mesh {
         let mut vertices_flat = vec![];
         let mut normals_flat: Vec<Vec<Vec4f32>> = vec![];
         let mut indices_flat = vec![];
+
         models.iter().enumerate().for_each(|(idx, m)| {
             let position_number = m.mesh.positions.len() / 3;
             let normal_number = m.mesh.normals.len() / 3;
@@ -135,11 +136,9 @@ impl Mesh {
                 }
             }
 
-
             let total: u32 = (0..idx)
                 .map(|i| models[i].mesh.positions.len() / 3)
-                .sum::<usize>() as u32;
-            
+                .sum::<usize>() as u32;          
 
             let indices = (0..m.mesh.indices.len() / 3)
                 .map(|i| {

@@ -118,7 +118,7 @@ impl RenderState {
             format: surface_format,
             width: scene.res.0,
             height: scene.res.1,
-            present_mode: wgpu::PresentMode::Fifo, //surface_caps.present_modes[0],
+            present_mode: wgpu::PresentMode::Immediate, //surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
         };
