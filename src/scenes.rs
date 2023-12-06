@@ -9,6 +9,13 @@ pub enum VertexType {
     Combined,
 }
 
+#[derive(Default, Debug, Copy, Clone)]
+pub enum TraverseType {
+    #[default]
+    Bsp,
+    Bvh,
+}
+
 #[derive(Debug, Clone)]
 pub struct SceneDescriptor {
     pub name: String,
@@ -18,6 +25,7 @@ pub struct SceneDescriptor {
     pub background_hdri: Option<PathBuf>,
     pub camera: Camera,
     pub res: (u32, u32),
+    pub traverse_type: TraverseType,
 }
 
 impl Default for SceneDescriptor {
@@ -30,6 +38,7 @@ impl Default for SceneDescriptor {
             model: Default::default(),
             camera: Default::default(),
             res: (512, 512),
+            traverse_type: Default::default(),
         }
     }
 }
@@ -341,6 +350,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             res: (800, 450),
             vertex_type: VertexType::Combined,
             background_hdri: Some(campus_background_path.clone()),
+            ..Default::default()
         },
         SceneDescriptor {
             name: String::from("W9 E1 Bunny"),
@@ -350,6 +360,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             res: (512, 512),
             vertex_type: VertexType::Combined,
             background_hdri: Some(campus_background_path.clone()),
+            ..Default::default()
         },
         SceneDescriptor {
             name: String::from("W9 E2 Teapot"),
@@ -359,6 +370,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             res: (800, 450),
             vertex_type: VertexType::Combined,
             background_hdri: Some(campus_background_hdr_path.clone()),
+            ..Default::default()
         },
         SceneDescriptor {
             name: String::from("W9 E2 Bunny"),
@@ -368,6 +380,7 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             res: (512, 512),
             vertex_type: VertexType::Combined,
             background_hdri: Some(campus_background_hdr_path.clone()),
+            ..Default::default()
         },
         SceneDescriptor {
             name: String::from("W9 E3 Teapot"),
@@ -377,6 +390,17 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             res: (800, 450),
             vertex_type: VertexType::Combined,
             background_hdri: Some(campus_background_path.clone()),
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("Project"),
+            shader: PathBuf::from("res/shaders/project.wgsl"),
+            model: Some(cornell_box_with_blocks_path.clone()),
+            camera: cornell_box_camera.clone(),
+            res: (512, 512),
+            vertex_type: VertexType::Combined,
+            traverse_type: TraverseType::Bvh,
+            ..Default::default()
         },
     ])
 }

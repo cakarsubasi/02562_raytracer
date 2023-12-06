@@ -47,7 +47,7 @@ pub struct RenderState {
     pub uniform: UniformGpu,
     textures: Vec<Texture>,
     mesh_handle: Option<StorageMeshGpu>,
-    bsp_tree_handle: TraversalStructure,
+    traversal_structure_handle: TraversalStructure,
     bind_groups: Vec<wgpu::BindGroup>,
     camera_controller: CameraController,
 }
@@ -153,7 +153,7 @@ impl RenderState {
             uniform: handles.3,
             textures: handles.4,
             mesh_handle: handles.5,
-            bsp_tree_handle: handles.6,
+            traversal_structure_handle: handles.6,
             camera_controller,
         }
     }
@@ -213,19 +213,22 @@ impl RenderState {
         });
         // create and load the BSP
         // TODO: allow BVHs
-        let bsp_tree = model.as_ref().and_then(|m| Some(m.bsp_tree()));
-        let bsp_tree_handle = bsp_tree.and_then(|b| Some(b.into_gpu(&device)));
-        let bsp_tree_handle = match bsp_tree_handle {
-            Some(handle) => TraversalStructure::Bsp(handle),
-            None => TraversalStructure::None,
+        let traversal_structure = if let Some(model) = model {
+            match scene.traverse_type {
+                crate::scenes::TraverseType::Bsp => TraversalStructure::Bsp(model.bsp_tree().into_gpu(device)),
+                crate::scenes::TraverseType::Bvh => TraversalStructure::Bvh(model.bvh().into_gpu(device)),
+            }
+        } else {
+            TraversalStructure::None
         };
+
         // generate bind group layouts
         let handles = [
             Some(&uniform as &dyn Bindable),
             mesh_handle
                 .as_ref()
                 .and_then(|mesh| Some(mesh as &dyn Bindable)),
-            Some(&bsp_tree_handle as &dyn Bindable),
+            Some(&traversal_structure as &dyn Bindable),
             Some(render_destination as &dyn Bindable),
         ]
         .into_iter()
@@ -258,7 +261,7 @@ impl RenderState {
             uniform,
             textures,
             mesh_handle,
-            bsp_tree_handle,
+            traversal_structure,
         ))
     }
 
@@ -268,7 +271,7 @@ impl RenderState {
             self.mesh_handle
                 .as_ref()
                 .and_then(|mesh| Some(mesh as &dyn Bindable)),
-            Some(&self.bsp_tree_handle as &dyn Bindable),
+            Some(&self.traversal_structure_handle as &dyn Bindable),
             Some(&self.render_destination as &dyn Bindable),
         ]
         .into_iter()
@@ -323,7 +326,7 @@ impl RenderState {
         self.uniform = handles.3;
         self.textures = handles.4;
         self.mesh_handle = handles.5;
-        self.bsp_tree_handle = handles.6;
+        self.traversal_structure_handle = handles.6;
         // update uniforms
         self.camera = scene.camera.to_owned();
         // update resolution

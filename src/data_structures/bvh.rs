@@ -2,7 +2,7 @@ use super::{bbox::Bbox, vector::Vec3f32};
 
 
 
-struct Bvh {
+pub struct Bvh {
 
 }
 

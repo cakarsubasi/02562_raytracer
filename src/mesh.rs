@@ -5,7 +5,7 @@ use crate::{
     data_structures::{
         bbox::Bbox,
         bsp_tree::{AccObj, BspTree},
-        vector::{vec3f32, Vec4f32, Vec4u32, vec4u32},
+        vector::{vec3f32, Vec4f32, Vec4u32, vec4u32}, bvh::Bvh,
     },
 };
 
@@ -193,6 +193,10 @@ impl Mesh {
 
     pub fn bsp_tree(&self) -> BspTree {
         BspTree::new(self.bboxes(), 20, 4)
+    }
+
+    pub fn bvh(&self) -> Bvh {
+        Bvh {}
     }
 
     #[allow(dead_code)]
