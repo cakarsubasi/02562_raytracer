@@ -24,6 +24,19 @@ fn environment_map(direction: vec3f) -> vec3f {
 
 I was mildly irritated when I used `atan` instead of `atan2` and had one side of the scene mirrored and inverted on the other side and did not know what was wrong.
 
+We also no longer have a direct contribution in the lambertian, so that can also go:
+
+```rs
+fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f {
+    /* snip */
+
+    // There is no direct light source, so just create a dummy light
+    let light = light_init();
+
+    /* snip */
+}
+```
+
 We then call it when our rays miss, and we are done:
 
 ```rs
@@ -135,9 +148,96 @@ I have also taken pictures of the bunny, however the bunny is floating and I did
 
 ### 3. Directional Light
 
-Time for some more fakery.
+Time for some more fakery. I have been provided the approximate direction of the sun thanks to some friends.
 
-Not done.
+```rs
+const SUN_DIRECTION = vec3f(1.0, -0.35, 0.0);
+```
+
+And now we can add fake hard shadows using the following:
+
+```rs
+fn sample_directional_light() -> Light {
+    let light_intensity = vec3f(10.0);
+    let light_direction = -normalize(SUN_DIRECTION);
+
+    var light = light_init();
+    light.l_i = light_intensity;
+    light.w_i = light_direction;
+    light.dist = 999999.0;
+
+    return light;
+}
+```
+
+We add the direct light contribution to the lambertian shader again:
+
+```rs
+fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f {
+    /* snip */
+
+    // Get the sun
+    let light = sample_directional_light();
+
+    /* snip */
+}
+```
+
+And finally update the holdout shader to return different values based on whether we hit the direct and indirect shadow rays:
+
+```rs
+fn holdout_shader(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f {
+    var contribution = 1.0;
+    
+    let normal = normalize((*hit).normal);
+    let xi1 = rnd(rand);
+    let xi2 = rnd(rand);
+    let thet = acos(sqrt(1.0-xi1));
+    let phi = 2.0 * PI * xi2;
+    let tang_dir = spherical_direction(sin(thet), cos(thet), phi);
+    let direct_dir = rotate_to_normal(normal, tang_dir);
+    let color = environment_map((*r).direction) * (*hit).factor;
+
+    // AO contribution
+    var hit_info = hit_record_init();
+    var ray = ray_init(direct_dir, (*hit).position);
+    if (intersect_scene_bsp(&ray, &hit_info)) {
+        contribution -= 0.5;
+    }
+
+    // sun contribution
+    let light = sample_directional_light();
+    ray = ray_init(light.w_i, (*hit).position);
+    if (intersect_scene_bsp(&ray, &hit_info)) {
+        contribution -= 0.5;
+    }  
+
+    (*hit).has_hit = true;
+    return color * contribution;
+}
+```
+
+We can now see a direct shadow and the whole shadow on the mirror.
+
+![](./img/w9_e3_mirror.png)
+
+And the lambertian:
+
+![](./img/w9_e3_diffuse_bad.png)
+
+The triangle intersection function has become the bane of my existence.
+
+I made a small edit:
+
+```rs
+    if (abs(denom) < 0.00005 || denom > 0.0) {
+        return false;
+    }
+```
+
+![](./img/w9_e3_diffuse.png)
+
+Looks pretty much perfect!
 
 ### 4. Another HDRI
 

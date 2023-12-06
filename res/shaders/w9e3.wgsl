@@ -19,7 +19,7 @@ const SHADER_TYPE_DEFAULT: u32 = 0u;
 const MAX_DEPTH: i32 = 50;
 
 // from Christiana
-// sun_direction = vec3f(1.0, -0.35, 0.0)
+const SUN_DIRECTION = vec3f(1.0, -0.35, 0.0);
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -275,7 +275,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let accum_color = (result + curr_sum)/f32(uniforms.iteration + 1u);
 
     var output = FragmentOutput(
-        vec4f(saturate(pow(accum_color, vec3f(1.0/1.0))), bgcolor.a),
+        vec4f(saturate(pow(accum_color, vec3f(1.5/1.0))), bgcolor.a),
         max(vec4f(accum_color, 1.0), vec4f(0.0)),
     );
     if (any(result < vec3f(0.0)) || any(accum_color < vec3f(0.0))) {
@@ -295,6 +295,7 @@ fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> 
     current = intersect_trimesh(r, hit);
     if (current) {
         (*hit).shader = uniforms.selection1;
+        (*hit).ior1_over_ior2 = 1.5;
     }
 
     has_hit = has_hit || current;
@@ -324,12 +325,12 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
 
     let nom = cross(o_to_v0, w_i);
     var denom = dot(w_i, normal);
-    if (abs(denom) < 1e-10) {
+    if (abs(denom) < 0.00005 || denom > 0.0) {
         return false;
     }
 
-    let beta = dot(nom, e1) / (denom);
-    let gamma = -dot(nom, e0) / (denom);
+    let beta = dot(nom, e1) / denom;
+    let gamma = -dot(nom, e0) / denom;
     let distance = dot(o_to_v0, normal) / denom;
     if (beta < 0.0 || gamma < 0.0 || beta + gamma > 1.0 || distance > ray.tmax || distance < ray.tmin) {
         return false;
@@ -339,7 +340,7 @@ fn intersect_triangle_indexed(r: ptr<function, Ray>, hit: ptr<function, HitRecor
     (*hit).dist = distance;
     let pos = ray_at(ray, distance);
     (*hit).position = pos;
-    (*hit).normal = normalize(n0 * (1.0 - beta - gamma) + n1 * beta + n2 * gamma);
+    (*hit).normal = normalize(n0 * (1.0 - beta - gamma + ETA) + n1 * (beta + ETA) + n2 * (gamma + ETA));
     set_material(hit, material);
 
     return true;
@@ -390,7 +391,7 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, plane: 
     (*hit).dist = distance;
     let pos = ray_at(*r, distance);
     (*hit).position = pos;
-    (*hit).normal = normal;
+    (*hit).normal = normalize(normal);
 
     let u = dot((pos - position), plane.tangent);
     let v = dot((pos - position), plane.binormal);
@@ -398,32 +399,15 @@ fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, plane: 
     return true;
 }
 
-fn sample_area_light(pos: vec3f, idx: u32, rand: ptr<function, u32>) -> Light {
-    let light_tri_idx: u32 = lightIndices[idx];
-    let light_triangle: vec4u = indexBuffer[light_tri_idx];
-    let v0 = combinedBuffer[light_triangle.x].position.xyz;
-    let v1 = combinedBuffer[light_triangle.y].position.xyz;
-    let v2 = combinedBuffer[light_triangle.z].position.xyz;
-    let area = triangle_area(v0, v1, v2);
-    let light_mat = materials[light_triangle.w];
-    let l_e = light_mat.ambient.xyz;
-    let psi1 = sqrt(rnd(rand));
-    let psi2 = rnd(rand);
-    let alpha = 1.0 - psi1;
-    let beta = (1.0 - psi2) * psi1;
-    let gamma = psi2 * psi1;
-    let normal = normalize(cross((v0 - v1), (v0 - v2)));
+fn sample_directional_light() -> Light {
+    let light_intensity = vec3f(10.0);
+    let light_direction = -normalize(SUN_DIRECTION);
 
-    let sampled_point = (v0 * alpha + v1 * beta + v2 * gamma);
-
-    let light_direction = sampled_point - pos;
-    let cos_l = max(dot(normalize(-light_direction), normal), 0.0);
-    let distance = sqrt(dot(light_direction, light_direction));
-    let light_intensity = (l_e * area) * cos_l / (distance * distance);
     var light = light_init();
     light.l_i = light_intensity;
-    light.w_i = normalize(light_direction);
-    light.dist = distance;
+    light.w_i = light_direction;
+    light.dist = 999999.0;
+
     return light;
 }
 
@@ -447,7 +431,7 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<functio
         case 6u: {
             color = shade_base_color(r, hit, rand);
         }
-        case 7u: {
+        case 3u: {
             color = transparent(r, hit, rand);
         }
         case 8u: {
@@ -469,13 +453,10 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
 
     let normal = (*hit).normal;
 
-    // Pick a random area light to sample
-    //let light_tris = arrayLength(&lightIndices) - 1u;
-    //let idx = (rnd_int(rand) % light_tris) + 1u;
-    //let light = sample_area_light((*hit).position, idx, rand);
-    let light = light_init();
+    // Get the sun
+    let light = sample_directional_light();
 
-    // Trace shadow rays to area light
+    // Trace shadow rays to the sun
     let ray_dir = light.w_i;
     let ray_orig = (*hit).position;
     var ray = ray_init(ray_dir, ray_orig);
@@ -507,6 +488,8 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
 }
 
 fn holdout_shader(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f {
+    var contribution = 1.0;
+    
     let normal = normalize((*hit).normal);
     let xi1 = rnd(rand);
     let xi2 = rnd(rand);
@@ -514,22 +497,24 @@ fn holdout_shader(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: pt
     let phi = 2.0 * PI * xi2;
     let tang_dir = spherical_direction(sin(thet), cos(thet), phi);
     let direct_dir = rotate_to_normal(normal, tang_dir);
+    let color = environment_map((*r).direction) * (*hit).factor;
 
-    var ray = ray_init(direct_dir, (*hit).position);
-    ray.tmin = ETA;
-    ray.tmax = 5000.0;
-    
+    // AO contribution
     var hit_info = hit_record_init();
-    let blocked = intersect_trimesh_immediate_return(&ray, &hit_info);
-
-    // if blocked, return zero contribution (AO)
-    if (blocked) {
-        return vec3f(0.0);
+    var ray = ray_init(direct_dir, (*hit).position);
+    if (intersect_scene_bsp(&ray, &hit_info)) {
+        contribution -= 0.5;
     }
 
-    // else just return the environment map
+    // sun contribution
+    let light = sample_directional_light();
+    ray = ray_init(light.w_i, (*hit).position);
+    if (intersect_scene_bsp(&ray, &hit_info)) {
+        contribution -= 0.5;
+    }  
+
     (*hit).has_hit = true;
-    return environment_map((*r).direction) * (*hit).factor;
+    return color * contribution;
 }
 
 fn setup_indirect(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) {
