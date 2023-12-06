@@ -1,3 +1,9 @@
+/// Types for Binary Space Partitioning Tree
+/// Adapted from Javascript/C++ code provided by Jeppe Revall Frisvad,
+/// which was inspired by BSP tree in GEL (http://www.imm.dtu.dk/GEL/)
+/// originally written by Bent Dalgaard Larsen
+/// License unspecified (used with permission)
+
 use std::fmt::Debug;
 
 use super::{
@@ -78,7 +84,7 @@ impl BspTree {
         due to memory limitations"
         );
         assert!(
-            max_depth > 0 && max_depth < 50,
+            max_depth > 0 && max_depth < 32,
             "BspTree depth should be positive and smaller than 32, got: {max_depth}"
         );
         assert!(
@@ -138,8 +144,8 @@ impl BspTree {
     ///
     /// ```
     /// bsp_array: Vec<Vec4u32> = vec![];
-    ///  // .0 = (xxxx xx00) : node_type
-    ///  // .0 = (0000 00xx) : node_count
+    ///  // .0 = (xxxx xxTT) : node_type
+    ///  // .0 = (CCCC CCxx) : node_count
     ///  // .1 = node_id
     ///  // .2 = left_node_id
     ///  // .3 = right_node_id
@@ -237,10 +243,6 @@ impl Node {
                     objects: objects.iter().map(|elem| (*elem).clone()).collect(),
                 },
             };
-            //for obj in objects {
-            //    tree_objects.push(*obj.to_owned());
-            //}
-
             node
         } else {
             // split the objects

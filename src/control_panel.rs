@@ -1,4 +1,9 @@
-// Heavily based on: https://github.com/hasenbanck/egui_example/blob/master/src/main.rs
+/// UI control panel
+/// Based on code shared by A.B. Sørensen in
+/// https://github.com/absorensen/the-guide/tree/main/m2_concurrency/code/egui-winit-wgpu-template
+/// Code originally based on: https://github.com/hasenbanck/egui_example/blob/master/src/main.rs
+/// Apache License 2.0
+
 
 use std::{env, iter, time::Instant, sync::Arc};
 
@@ -545,9 +550,9 @@ impl ControlPanel {
             ui.label("Max Samples");
             let samples = ui.add(
                 egui::widgets::DragValue::new(&mut self.max_samples)
-                    .clamp_range(1..=4096)
-                    .fixed_decimals(1)
-                    .speed(1),
+                    .clamp_range(1..=2000000)
+                    .fixed_decimals(0)
+                    .speed(10),
             );
 
             let checkbox = ui.checkbox(&mut self.progressive_enabled, "Progressive");

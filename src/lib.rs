@@ -1,3 +1,8 @@
+/// UI and Rendering thread code for a shader based path tracer
+/// Based on code shared by A.B. Sørensen in
+/// https://github.com/absorensen/the-guide/tree/main/m2_concurrency/code/egui-winit-wgpu-template
+/// Apache License 2.0
+
 mod bindings;
 mod camera;
 mod command;
@@ -264,14 +269,6 @@ pub async fn run() {
 
     let scenes = get_scenes();
 
-    // Create control panel
-    let control_panel: ControlPanel = ControlPanel::build(
-        &gpu_handles,
-        &event_loop,
-        CONTROL_WINDOW_SIZE,
-        WINDOW_PADDING,
-        scenes.clone(),
-    );
 
     let render_state_window = winit::window::WindowBuilder::new()
         .with_decorations(true)
@@ -286,6 +283,16 @@ pub async fn run() {
         2 * WINDOW_PADDING + CONTROL_WINDOW_SIZE.width,
         WINDOW_PADDING,
     ));
+
+        // Create control panel
+        let control_panel: ControlPanel = ControlPanel::build(
+            &gpu_handles,
+            &event_loop,
+            CONTROL_WINDOW_SIZE,
+            WINDOW_PADDING,
+            scenes.clone(),
+        );
+    
 
     let mut render_state = RenderState::new(&event_loop, render_state_window, &scenes[0]).await;
 
@@ -337,7 +344,7 @@ fn rendering_thread(
                             panic!("out of memory")
                         }
                         // All other errors (Outdated, Timeout) should be resolved by the next frame
-                        Err(e) => eprintln!("{:?}", e),
+                        Err(_) => {},
                     }
                     render_stats.end_capture();
 
@@ -356,7 +363,7 @@ fn rendering_thread(
         }
 
         loop {
-            match receiver.recv_timeout(std::time::Duration::from_millis(6)) {
+            match receiver.recv_timeout(std::time::Duration::from_millis(0)) {
                 Err(RecvTimeoutError::Timeout) => break,
                 Err(_err) => break,
                 Ok(command) => {
@@ -473,6 +480,7 @@ fn rendering_thread(
                                 render_state.uniform.max_iterations = 2;
                             }
                         }
+                        #[allow(unreachable_patterns)]
                         _other => {
                             eprintln!("Detected and dropped command {_other:?}");
                         }

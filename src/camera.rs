@@ -1,3 +1,8 @@
+/// Camera type for the renderer
+/// Based on the LearnWGPU repository by Ben Hansen
+/// https://github.com/sotrh/learn-wgpu
+/// MIT License
+
 use winit::event::*;
 
 use crate::command::Command;
@@ -27,21 +32,6 @@ impl Default for Camera {
         }
     }
 }
-
-//impl Camera {
-//    fn translate(&mut self, translation: &Vector3<f32>) {
-//        self.eye += *translation;
-//        self.target += *translation;
-//    }
-//
-//    fn orbit_horizontal(&mut self, orbit: f32) {
-//        todo!();
-//    }
-//
-//    fn rotate(&mut self, rotation: &Vector3<f32>) {
-//        todo!();
-//    }
-//}
 
 pub struct CameraController {
     speed: f32,

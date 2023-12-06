@@ -1,3 +1,8 @@
+///
+/// Axis aligned bounding box
+/// Adapted from Javascript/C++ code provided by Jeppe Revall Frisvad,
+/// originally based on code by Nvidia, MIT License (2008-2010)
+
 use super::vector::*;
 
 

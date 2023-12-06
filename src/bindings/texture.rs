@@ -1,4 +1,9 @@
-use std::{fs::File, path::Path};
+/// Types for handling Texture bind groups
+/// Based on the LearnWGPU repository by Ben Hansen
+/// https://github.com/sotrh/learn-wgpu
+/// MIT License
+
+use std::path::Path;
 
 use anyhow::*;
 use image::{GenericImageView, io::Reader};
@@ -13,7 +18,7 @@ pub struct TextureInfo {
 
 pub struct Texture {
     pub name: String,
-    texture: wgpu::Texture,
+    _texture: wgpu::Texture,
     view: wgpu::TextureView,
     sampler_default: Option<(String, wgpu::Sampler)>,
     sampler_bilinear: Option<(String, wgpu::Sampler)>,
@@ -30,7 +35,6 @@ impl Texture {
     where
         P: AsRef<Path> + std::fmt::Debug,
     {
-        let file = File::open(file_name.as_ref())?;
         let image = Reader::open(file_name)?.decode()?;
         Self::from_image(info, device, queue, &image)
     }
@@ -56,7 +60,7 @@ impl Texture {
 
         Ok(Self {
             name: info.name,
-            texture,
+            _texture: texture,
             view,
             sampler_default: if info.samplers[0] {
                 Some((format!("{}", info.sampler_name), sampler_default))
@@ -105,7 +109,7 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });

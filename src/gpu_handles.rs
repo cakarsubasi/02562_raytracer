@@ -1,3 +1,8 @@
+/// Helper types for the control panel
+/// Based on code shared by A.B. Sørensen in
+/// https://github.com/absorensen/the-guide/tree/main/m2_concurrency/code/egui-winit-wgpu-template
+/// Apache License 2.0
+
 use wgpu::{Adapter, AdapterInfo, Device, Instance, Queue};
 
 // A convenience wrapper for interfacing with the GPU.
