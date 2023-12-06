@@ -1,3 +1,8 @@
+/// Types for sending messages from the UI thread to the rendering thread
+/// Based on code shared by A.B. Sørensen in
+/// https://github.com/absorensen/the-guide/tree/main/m2_concurrency/code/egui-winit-wgpu-template
+/// Apache License 2.0
+
 use winit::{dpi::PhysicalSize, event::{VirtualKeyCode, ElementState}};
 use strum_macros::{EnumIter, IntoStaticStr};
 
