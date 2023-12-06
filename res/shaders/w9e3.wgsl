@@ -12,10 +12,14 @@ const SHADER_TYPE_GLOSSY: u32 = 4u;
 const SHADER_TYPE_NORMAL: u32 = 5u;
 const SHADER_TYPE_BASECOLOR: u32 = 6u;
 const SHADER_TYPE_TRANSPARENT: u32 = 7u;
+const SHADER_TYPE_HOLDOUT: u32 = 8u;
 const SHADER_TYPE_NO_RENDER: u32 = 255u;
 const SHADER_TYPE_DEFAULT: u32 = 0u;
 
 const MAX_DEPTH: i32 = 50;
+
+// from Christiana
+// sun_direction = vec3f(1.0, -0.35, 0.0)
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -82,7 +86,6 @@ struct HitRecord {
     factor: vec3f,
     extinction: vec3f,
     emit: bool,
-    uv0: vec2f,
     material: u32,
     // shader properties
     shader: ShaderType,
@@ -102,7 +105,6 @@ fn hit_record_init() -> HitRecord {
         vec3f(1.0),
         vec3f(1.0),
         true,
-        vec2f(0.0),
         0u,
         // shader properties
         SHADER_TYPE_NO_RENDER,
@@ -261,8 +263,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         if (intersect_scene_bsp(&r, &hit)) {
             result += shade(&r, &hit, &t);
         } else {
-            result += environment_map(r.direction) * hit.factor; 
-            break;
+            result += environment_map(r.direction) * hit.factor; break;
         }
 
         if (hit.has_hit) {
@@ -274,7 +275,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let accum_color = (result + curr_sum)/f32(uniforms.iteration + 1u);
 
     var output = FragmentOutput(
-        vec4f(saturate(pow(accum_color, vec3f(1.5/1.0))), bgcolor.a),
+        vec4f(saturate(pow(accum_color, vec3f(1.0/1.0))), bgcolor.a),
         max(vec4f(accum_color, 1.0), vec4f(0.0)),
     );
     if (any(result < vec3f(0.0)) || any(accum_color < vec3f(0.0))) {
@@ -286,10 +287,16 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
     var has_hit = false;
     var current = false;
+    current = intersect_plane(r, hit, plane_onb, vec3f(0.0, 0.0, 0.0));
+    if (current) {
+        (*hit).shader = SHADER_TYPE_HOLDOUT;
+    }
+    has_hit = has_hit || current;
     current = intersect_trimesh(r, hit);
     if (current) {
         (*hit).shader = uniforms.selection1;
     }
+
     has_hit = has_hit || current;
     return has_hit;
 }
@@ -366,6 +373,31 @@ fn intersect_sphere(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, center
     return true;
 }
 
+struct Onb {
+    tangent: vec3f,
+    binormal: vec3f,
+    normal: vec3f,
+};
+const plane_onb = Onb(vec3f(-1.0, 0.0, 0.0), vec3f(0.0, 0.0, 1.0), vec3f(0.0, 1.0, 0.0));
+
+fn intersect_plane(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, plane: Onb, position: vec3f) -> bool {
+    let normal = plane_onb.normal;
+    let distance = dot((position - (*r).origin), normal)/(dot((*r).direction, normal));
+    if (distance < (*r).tmin || distance > (*r).tmax) {
+        return false;
+    }
+    (*r).tmax = distance;
+    (*hit).dist = distance;
+    let pos = ray_at(*r, distance);
+    (*hit).position = pos;
+    (*hit).normal = normal;
+
+    let u = dot((pos - position), plane.tangent);
+    let v = dot((pos - position), plane.binormal);
+
+    return true;
+}
+
 fn sample_area_light(pos: vec3f, idx: u32, rand: ptr<function, u32>) -> Light {
     let light_tri_idx: u32 = lightIndices[idx];
     let light_triangle: vec4u = indexBuffer[light_tri_idx];
@@ -418,6 +450,9 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<functio
         case 7u: {
             color = transparent(r, hit, rand);
         }
+        case 8u: {
+            color = holdout_shader(r, hit, rand);
+        }
         default: {
             color = error_shader();
         }
@@ -434,7 +469,10 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
 
     let normal = (*hit).normal;
 
-    // There is no direct light source, so just create a dummy light
+    // Pick a random area light to sample
+    //let light_tris = arrayLength(&lightIndices) - 1u;
+    //let idx = (rnd_int(rand) % light_tris) + 1u;
+    //let light = sample_area_light((*hit).position, idx, rand);
     let light = light_init();
 
     // Trace shadow rays to area light
@@ -466,6 +504,32 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
     }
 
     return diffuse + ambient;
+}
+
+fn holdout_shader(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f {
+    let normal = normalize((*hit).normal);
+    let xi1 = rnd(rand);
+    let xi2 = rnd(rand);
+    let thet = acos(sqrt(1.0-xi1));
+    let phi = 2.0 * PI * xi2;
+    let tang_dir = spherical_direction(sin(thet), cos(thet), phi);
+    let direct_dir = rotate_to_normal(normal, tang_dir);
+
+    var ray = ray_init(direct_dir, (*hit).position);
+    ray.tmin = ETA;
+    ray.tmax = 5000.0;
+    
+    var hit_info = hit_record_init();
+    let blocked = intersect_trimesh_immediate_return(&ray, &hit_info);
+
+    // if blocked, return zero contribution (AO)
+    if (blocked) {
+        return vec3f(0.0);
+    }
+
+    // else just return the environment map
+    (*hit).has_hit = true;
+    return environment_map((*r).direction) * (*hit).factor;
 }
 
 fn setup_indirect(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) {
