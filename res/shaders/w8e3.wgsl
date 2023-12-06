@@ -611,7 +611,6 @@ fn transparent(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<f
             return vec3f(0.0);
         }
         // absorption
-        //(*hit).factor /= (1.0 - reflection_prob - transmission_prob);
         (*hit).has_hit = true;
         return vec3f(0.0);
     }

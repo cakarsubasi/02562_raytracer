@@ -126,13 +126,69 @@ The image is once again off at the edges of the transmitting sphere.
 
 ### 3. Absorption
 
-![](./img/w8_e3_bad.png)
+For absorption, we need to modify the transmit shader again. To make it more clear what the code is doing, I split it into two large branches, one for entering and one for exiting the object. When entering, the only possible events are reflection and transmission (refraction). When exiting, we can have internal reflection, transmission, or absorption. 
+
+```rs
+fn transparent(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f {
+    let w_i = -normalize((*r).direction);
+    let normal = normalize((*hit).normal);
+    var out_normal = vec3f(0.0);
+    var ior = (*hit).ior1_over_ior2;
+    // figure out if we are inside or outside
+    var cos_thet_i = dot(w_i, normal);
+    // normals point outward, so if this is positive
+    // we are inside the object
+    // and if this is negative, we are outside
+    var absorption = 0.0;
+    var T_r = vec3f(1.0);
+    if (cos_thet_i < 0.0) {
+        // entering
+
+        /* snip 
+           same as the previous section
+        */
+    } else {
+        // exiting
+        ior = 1.0 / ior;
+        out_normal = normal;
+        let s = length((*hit).position - (*r).origin) / 100.0;
+        let rho_t = (*hit).extinction;
+        T_r = exp(-rho_t*s);
+        let transmission_prob = (T_r.r + T_r.g + T_r.b) / 3.0;
+        if (transmission_prob < 0.0 || transmission_prob > 1.0) {
+            return error_shader();
+        }
+
+        /* snip 
+           reflection calculations
+        */
+
+        (*hit).has_hit = false;
+        (*hit).emit = true;
+
+        let step = rnd(rand);
+        if (step < reflection_prob) {
+            // reflection
+            (*hit).normal = out_normal;
+            return mirror(r, hit, rand);
+        }
+        else if (step < reflection_prob + transmission_prob) {
+            // transmission
+            (*hit).factor = (*hit).factor * T_r / (reflection_prob + transmission_prob);
+            return vec3f(0.0);
+        }
+        // absorption
+        (*hit).has_hit = true;
+        return vec3f(0.0);
+    }
+}
+```
+
+When using certain extinction values, the results can be quite convincing:
 
 ![](./img/w8_e3_better.png)
 
-Correctness?
-
-I do not think that I did this part correctly, there is likely somewhere I forgot a scaling factor. I will use another example for this.
+However, I do not think that I did this part correctly, there is likely somewhere I forgot a scaling factor. I will use another example for this.
 
 ![](./img/w8_e3_issues.png)
 
