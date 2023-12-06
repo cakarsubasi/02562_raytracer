@@ -382,17 +382,8 @@ fn shade(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<functio
         case 0u: {
             color = lambertian(r, hit, rand);
         }
-        case 1u: {
-            color = phong(r, hit, rand);
-        }
         case 2u: {
             color = mirror(r, hit, rand);
-        }
-        case 3u: {
-            color = transmit(r, hit, rand);
-        }
-        case 4u: {
-            color = glossy(r, hit, rand);
         }
         case 5u: {
             color = shade_normal(r, hit, rand);
@@ -440,90 +431,17 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<fu
         ambient = emission;
     }
 
-    return diffuse + ambient;
+    return (diffuse + ambient);
 }
 
 fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f { 
-    var hit_record = *hit;
-    
-    let normal = hit_record.normal;
+    let normal = (*hit).normal;
     let ray_dir = reflect((*r).direction, normal);
-    let ray_orig = hit_record.position;
+    let ray_orig = (*hit).position;
     *r = ray_init(ray_dir, ray_orig);
 
-    hit_record.has_hit = false;
-    *hit = hit_record;
-    return vec3f(0.0, 0.0, 0.0);
-}
-
-fn glossy(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f {
-    return phong(r, hit, rand) + transmit(r, hit, rand);
-}
-
-fn phong(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f { 
-    let specular = (*hit).specular;
-    let s = (*hit).shininess;
-    let normal = (*hit).normal;
-    let position = (*hit).position;
-
-    let coeff = specular * (s + 2.0) / (2.0 * PI);
-
-    let w_o = normalize(uniforms.camera_pos - position); // view direction
-
-    let light_tris = arrayLength(&lightIndices);
-    var phong_total = vec3f(0.0);
-    for (var idx = 1u; idx < light_tris; idx++) {
-        let light = sample_area_light((*hit).position, idx, rand);
-        let light_dir = light.w_i;
-        let light_intensity = light.l_i;
-        let light_dist = light.dist;
-
-        let w_r = normalize(reflect(-light.w_i, normal));
-        let diffuse = saturate(vec3f(dot(normal, light.w_i))) * light.l_i / PI;
-        let w_o_dot_w_r = dot(w_o, w_r);
-
-        phong_total += pow(saturate(w_o_dot_w_r), s) * diffuse / (light_dist * light_dist);
-    }
-
-    let phong_overall = coeff * phong_total;
-    return vec3f(phong_overall);
-}
-
-fn transmit(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<function, u32>) -> vec3f {
-    var hit_record = *hit;
-    let ray = *r;
-    let w_i = -normalize(ray.direction);
-    let normal = normalize(hit_record.normal);
-    var out_normal = vec3f(0.0);
-
-    var ior = hit_record.ior1_over_ior2;
-    // figure out if we are inside or outside
-    let cos_thet_i = dot(w_i, normal);
-    // normals point outward, so if this is positive
-    // we are inside the object
-    // and if this is negative, we are outside
-    if (cos_thet_i < 0.0) {
-        // outside
-        out_normal = -normal;
-    } else {
-        // inside
-        ior = 1.0 / ior;
-        out_normal = normal;
-    }
-
-    let cos_thet_t_2 = (1.0 - (ior*ior) * (1.0 - cos_thet_i * cos_thet_i));
-    if (cos_thet_t_2 < 0.0) {
-        return error_shader();
-    }
-    let tangent = ((normal * cos_thet_i - w_i));
+    (*hit).has_hit = false;
     
-    let w_t = ior * tangent - (out_normal * sqrt(cos_thet_t_2));
-    let orig = hit_record.position + w_t * ETA;
-
-    *r = ray_init(w_t, orig); 
-    hit_record.has_hit = false;
-
-    *hit = hit_record;
     return vec3f(0.0, 0.0, 0.0);
 }
 
@@ -553,11 +471,11 @@ fn transparent(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<f
         // total internal reflection
         reflection_prob = 1.0;
     } else {
-        reflection_prob = fresnel_r(cos_thet_i, sqrt(cos_thet_t_2), ior);
+        reflection_prob = saturate(fresnel_r(cos_thet_i, sqrt(cos_thet_t_2), ior));
     }
-    let tangent = (out_normal * cos_thet_i - w_i);
+    let tangent = out_normal * cos_thet_i - w_i;
     
-    let w_t = ior * tangent - (normalize(out_normal) * sqrt(cos_thet_t_2));
+    let w_t = ior * tangent - (out_normal * sqrt(cos_thet_t_2));
     let orig = (*hit).position;
 
     *r = ray_init(w_t, orig); 

@@ -247,7 +247,7 @@ fn get_camera_ray(uv: vec2f, jitter: vec2f) -> Ray {
 @fragment
 fn fs_main(in: VertexOutput) -> FragmentOutput {
     let bgcolor = vec4f(BACKGROUND_COLOR, 1.0);
-    let firefly_clamp = vec3f(999.0);
+    let firefly_clamp = vec3f(100.0);
     let max_depth = MAX_DEPTH;
     let uv = in.coords * 0.5;
 
@@ -299,7 +299,7 @@ fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> 
     if (current) {
         (*hit).shader = SHADER_TYPE_TRANSPARENT;
         (*hit).ior1_over_ior2 = 1.5;
-        (*hit).extinction = vec3f(2000.0, 0.0, 0.0);
+        (*hit).extinction = vec3f(0.5, 0.2, 0.2);
     }
     has_hit = has_hit || current;
     current = intersect_trimesh(r, hit);
@@ -520,6 +520,7 @@ fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<functi
 
     *hit = hit_record;
     (*hit).emit = true;
+
     return vec3f(0.0, 0.0, 0.0);
 }
 
@@ -565,6 +566,7 @@ fn transparent(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<f
         } else {
             // transmission
             return vec3f(0.0);
+
         }
 
 
@@ -609,6 +611,7 @@ fn transparent(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<f
             return vec3f(0.0);
         }
         // absorption
+        //(*hit).factor /= (1.0 - reflection_prob - transmission_prob);
         (*hit).has_hit = true;
         return vec3f(0.0);
     }

@@ -246,6 +246,7 @@ fn get_camera_ray(uv: vec2f, jitter: vec2f) -> Ray {
 fn fs_main(in: VertexOutput) -> FragmentOutput {
     let bgcolor = vec4f(BACKGROUND_COLOR, 1.0);
     let max_depth = MAX_DEPTH;
+    let firefly_clamp = vec3f(100.0);
     let uv = in.coords * 0.5;
 
     let coord_y: u32 = u32(in.clip_position.y);
@@ -261,7 +262,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var hit = hit_record_init();
     for (var i = 0; i < max_depth; i++) {
         if (intersect_scene_bsp(&r, &hit)) {
-            result += shade(&r, &hit, &t);
+            result += min(shade(&r, &hit, &t), firefly_clamp);
         } else {
             result += bgcolor.rgb; break;
         }
@@ -555,13 +556,14 @@ fn transparent(r: ptr<function, Ray>, hit: ptr<function, HitRecord>, rand: ptr<f
 
     *r = ray_init(w_t, orig); 
     (*hit).has_hit = false;
-    (*hit).emit = true;
+    (*hit).emit = true; // change
 
     let step = rnd(rand);
     if (step < reflection_prob) {
         (*hit).normal = out_normal;
         return mirror(r, hit, rand);
     } else {
+        (*hit).factor /= (1.0 - reflection_prob);
         return vec3f(0.0);
     }
 }
