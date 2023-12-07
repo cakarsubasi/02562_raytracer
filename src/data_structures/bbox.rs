@@ -4,6 +4,7 @@
 /// originally based on code by Nvidia, MIT License (2008-2010)
 
 use super::vector::*;
+use rdst::RadixKey;
 
 
 ///
@@ -152,6 +153,13 @@ impl Bbox {
         !(other.min.0 > self.max.0 || other.max.0 < self.min.0) &&
         !(other.min.1 > self.max.1 || other.max.1 < self.min.1) &&
         !(other.min.2 > self.max.2 || other.max.2 < self.min.2)
+    }
+
+    pub fn distance_center(&self, other: &Bbox) -> f32 {
+        let center1 = self.center();
+        let center2 = other.center();
+        let distance = center1 - center2;
+        distance.magnitude()
     }
 
 

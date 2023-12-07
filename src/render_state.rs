@@ -211,8 +211,7 @@ impl RenderState {
             crate::scenes::VertexType::Split => Some(m.into_gpu_split(&device)),
             crate::scenes::VertexType::Combined => Some(m.into_gpu_combined(&device)),
         });
-        // create and load the BSP
-        // TODO: allow BVHs
+        // Create traversal structures
         let traversal_structure = if let Some(model) = model {
             match scene.traverse_type {
                 crate::scenes::TraverseType::Bsp => TraversalStructure::Bsp(model.bsp_tree().into_gpu(device)),

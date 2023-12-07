@@ -196,7 +196,7 @@ impl Mesh {
     }
 
     pub fn bvh(&self) -> Bvh {
-        Bvh {}
+        Bvh::new(&self, 4)
     }
 
     #[allow(dead_code)]

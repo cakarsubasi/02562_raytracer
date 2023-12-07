@@ -29,8 +29,8 @@ pub struct BspTree {
 /// in the index buffer that corresponds to the bbox
 #[derive(Debug, Copy, Clone)]
 pub struct AccObj {
-    idx: u32,
-    bbox: Bbox,
+    pub idx: u32,
+    pub bbox: Bbox,
 }
 
 impl AccObj {

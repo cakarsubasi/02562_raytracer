@@ -40,6 +40,12 @@ pub const fn vec4u32(u0: u32, u1: u32, u2: u32, u3: u32) -> Vec4<u32> {
     Vec4::<u32>(u0, u1, u2, u3)
 }
 
+pub fn dot<T>(v1: Vec3<T>, v2: Vec3<T>) -> T 
+where T: Mul<Output = T> + Add<Output = T>
+{
+    v1.0 * v2.0 + v1.1 * v2.1 + v1.2 * v2.2
+}
+
 /// Vec3 Methods
 ///
 
@@ -56,6 +62,14 @@ pub trait Sqrt {
     fn sqrt(self) -> Self::Output;
 }
 
+impl Sqrt for Vec3<f32> {
+    type Output = Vec3<f32>;
+
+    fn sqrt(self) -> Self::Output {
+        vec3f32(self.0.sqrt(), self.1.sqrt(), self.2.sqrt())
+    }
+}
+
 impl Sqrt for f32 {
 
     fn sqrt(self) -> Self::Output {
@@ -67,13 +81,12 @@ impl Sqrt for f32 {
 
 impl<T> Vec3<T>
 where T: Copy + Sqrt<Output = T> + Mul<Output = T> + Add<Output = T> + Div<Output = T>,
-Vec3<T>: Div<Output = Vec3<T>> {
-    #[allow(dead_code)]
+//Vec3<T>: Div<Output = Vec3<T>> 
+{
     pub fn magnitude(self) -> T {
         T::sqrt(self.0 * self.0 + self.1 * self.1 + self.2 * self.2)
     }
 
-    #[allow(dead_code)]
     pub fn normalize(self) -> Self {
         let magnitude = self.magnitude();
         Self(self.0 / magnitude, self.1 / magnitude, self.2 / magnitude)
