@@ -100,24 +100,48 @@ fn intersect_bb2(ray_dir_inv: vec3f, ray_orig: vec3f, bbox: BvhNode) -> bool {
         return false;
     }
 
-
-
-
     return true;
 }
 
 
 var<private> node_stack: array<u32, MAX_LEVEL>;
+var<private> node_stack_top: u32;
+
+fn stack_init() {
+    node_stack_top = 0u;
+}
+fn stack_push_node(value: u32) {
+    node_stack[node_stack_top] = value;
+    node_stack_top += 1u;
+}
+fn stack_pop_node() -> u32 {
+    if (node_stack_top == 0u) {
+        // crash the GPU
+        while (true) {
+
+        }
+    }
+    node_stack_top -= 1u;
+    return node_stack[node_stack_top];
+}
+
+fn stack_is_empty() -> bool {
+    return (node_stack_top == 0u);
+}
 
 fn intersect_bvh(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
     let ray_dir_inv = 1.0 / (*r).direction;
     let ray_orig = (*r).origin;
     var t_max = F32_MAX;
-    var to_visit = 0;
+    stack_init();
     var current_node_index = 0u;
     var found = false;
-    node_stack[0] = 0u;
+    stack_push_node(0u);
     for (var depth = 0u; depth < 1000u; depth++) {
+        if (stack_is_empty()) {
+            break;
+        }
+        current_node_index = stack_pop_node();
         let current_node = bvh_nodes[current_node_index];
         if (intersect_bb2(ray_dir_inv, ray_orig, current_node)) {
             // leaf node
@@ -132,24 +156,16 @@ fn intersect_bvh(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
                         found = true;
                     }
                 }
-                if (to_visit == 0) {
-                    break;
-                }
                 
             // internal node
             } else {
-                node_stack[to_visit] = current_node.offset_ptr;
-                to_visit++;
-                node_stack[to_visit] = current_node_index + 1u;
-                to_visit++;
-            }
-        } else {
-            if (to_visit == 0) {
-                break;
+                stack_push_node(current_node_index + 1u);
+                // TODO: I HAVE TO SUBSTRACT 1 HERE BECAUSE I DID NOT
+                // SET THE OFFSET_PTR CORRECTLY IN THE REFERENCE IMPL
+                // GOTTA BE CAREFUL OF THAT
+                stack_push_node(current_node.offset_ptr - 1u);
             }
         }
-        to_visit--;
-        current_node_index = node_stack[to_visit];
     }
 
     return found;
