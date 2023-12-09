@@ -5,7 +5,7 @@ use crate::{
     data_structures::{
         bbox::Bbox,
         bsp_tree::{AccObj, BspTree},
-        vector::{vec3f32, Vec4f32, Vec4u32, vec4u32}, bvh::Bvh,
+        vector::{vec3f32, Vec4f32, Vec4u32, vec4u32, vec4f32}, bvh::Bvh,
     },
 };
 
@@ -17,6 +17,17 @@ pub struct Material {
     pub specular: Vec4f32,
     pub emissive: u32,
     _padding0: [u32; 3],
+}
+
+impl Default for Material {
+    fn default() -> Self {
+        Self { 
+            diffuse: vec4f32(0.5, 0.5, 0.5, 1.0), 
+            ambient: vec4f32(0.0, 0.0, 0.0, 0.0), 
+            specular: vec4f32(0.0, 0.0, 0.0, 0.0), 
+            emissive: 0, 
+            _padding0: Default::default() }
+    }
 }
 
 ///
@@ -61,7 +72,7 @@ impl Mesh {
             },
         )?;
 
-        let materials = 
+        let mut materials = 
         if let Ok(materials_obj) = materials_maybe {
             materials_obj.iter().map( |m| {
                 let diffuse = if let Some(diffuse) = m.diffuse {
@@ -94,8 +105,12 @@ impl Mesh {
                 }
             }).collect()
         } else {
-            vec![]
+            vec![Default::default()]
         };
+
+        if materials.len() == 0 {
+            materials.push(Default::default());
+        }
 
         let mut vertices_flat = vec![];
         let mut normals_flat: Vec<Vec<Vec4f32>> = vec![];

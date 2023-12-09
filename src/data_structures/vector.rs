@@ -29,6 +29,10 @@ pub const fn vec3f32(f0: f32, f1: f32, f2: f32) -> Vec3<f32> {
 pub const fn vec3f(f0: f32, f1: f32, f2: f32) -> Vec3<f32> {
     vec3f32(f0, f1, f2)
 }
+#[inline(always)]
+pub const fn vec4f32(f0: f32, f1: f32, f2: f32, f3: f32) -> Vec4<f32> {
+    Vec4::<f32>(f0, f1, f2, f3)
+}
 
 #[inline(always)]
 pub const fn vec3u32(u0: u32, u1: u32, u2: u32) -> Vec3<u32> {

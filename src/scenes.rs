@@ -84,6 +84,8 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
         ..Default::default()
     };
 
+    let test_object_path = PathBuf::from("res/models/test_object.obj");
+    let plane_object_path = PathBuf::from("res/models/plane.obj");
     let cornell_box_path = PathBuf::from("res/models/CornellBox.obj");
     let cornell_box_with_blocks_path = PathBuf::from("res/models/CornellBoxWithBlocks.obj");
     let bunny_path = PathBuf::from("res/models/bunny.obj");
@@ -397,6 +399,26 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             shader: PathBuf::from("res/shaders/project.wgsl"),
             model: Some(cornell_box_with_blocks_path.clone()),
             camera: cornell_box_camera.clone(),
+            res: (512, 512),
+            vertex_type: VertexType::Combined,
+            traverse_type: TraverseType::Bvh,
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("Project 2"),
+            shader: PathBuf::from("res/shaders/project.wgsl"),
+            model: Some(test_object_path.clone()),
+            camera: basic_scene_camera.clone(),
+            res: (512, 512),
+            vertex_type: VertexType::Combined,
+            traverse_type: TraverseType::Bvh,
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("Project 3"),
+            shader: PathBuf::from("res/shaders/project.wgsl"),
+            model: Some(plane_object_path.clone()),
+            camera: basic_scene_camera.clone(),
             res: (512, 512),
             vertex_type: VertexType::Combined,
             traverse_type: TraverseType::Bvh,
