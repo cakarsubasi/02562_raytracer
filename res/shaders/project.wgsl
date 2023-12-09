@@ -197,20 +197,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 fn intersect_scene_bsp(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
     var has_hit = false;
     var current = false;
-    current = intersect_sphere(r, hit, vec3f(420.0, 90.0, 370.0), 90.0);
-    if (current) {
-        (*hit).shader = SHADER_TYPE_MIRROR;
-    }
     has_hit = has_hit || current;
-    current = intersect_sphere(r, hit, vec3f(130.0, 90.0, 250.0), 90.0);
+    current = intersect_bvh(r, hit);
     if (current) {
-        (*hit).shader = SHADER_TYPE_GLOSSY;
-        (*hit).ior1_over_ior2 = 1.5;
-    }
-    has_hit = has_hit || current;
-    current = intersect_trimesh(r, hit);
-    if (current) {
-        (*hit).shader = SHADER_TYPE_LAMBERTIAN;
+        (*hit).shader = SHADER_TYPE_NORMAL;
     }
     has_hit = has_hit || current;
     return has_hit;

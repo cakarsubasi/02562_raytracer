@@ -196,7 +196,11 @@ impl Mesh {
     }
 
     pub fn bvh(&self) -> Bvh {
-        Bvh::new(&self, 4)
+        let bvh = Bvh::new_n3(&self);
+        println!("{:#?}", bvh);
+        println!("{:#?}", bvh.flatten());
+        println!("{:#?}", bvh.triangles());
+        bvh
     }
 
     #[allow(dead_code)]
