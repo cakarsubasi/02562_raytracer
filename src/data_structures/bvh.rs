@@ -1,8 +1,6 @@
-use rdst::RadixKey;
-
 use crate::mesh::Mesh;
 
-use super::{bbox::Bbox, vector::Vec3f32, bsp_tree::AccObj};
+use super::{bbox::Bbox, vector::Vec3f32};
 
 #[derive(Debug)]
 pub struct Bvh {
@@ -13,74 +11,66 @@ pub struct Bvh {
     //sorted_prims: Vec<MortonPrimitive>,
 }
 
-pub struct BvhBuildNode {
-    
-}
-
 #[derive(Debug)]
 struct Cluster {
+    pub boxes: u32,
     pub bbox: Bbox,
     pub cluster_type: ClusterType,
-}
-
-struct MortonPrimitive {
-    pub index: u32,
-    pub morton_code: u32, // use 30 bits
-}
-
-impl RadixKey for MortonPrimitive {
-    const LEVELS: usize = 4;
-
-    fn get_level(&self, level: usize) -> u8 {
-        (self.morton_code >> (level * 8)) as u8
-    }
 }
 
 #[derive(Debug)]
 enum ClusterType {
     Leaf {
-        primitive: u32,
+        start_idx: u32,
     },
     Interior {
-        boxes: u32,
         left: Box<Cluster>,
         right: Box<Cluster>,
     },
 }
 
+
 impl Cluster {
-    fn singleton(obj: &AccObj) -> Self {
+    fn singleton(bbox: &Bbox, index: u32) -> Self {
         Cluster {
-            bbox: obj.bbox,
-            cluster_type: ClusterType::Leaf { primitive: obj.idx }
+            boxes: 1,
+            bbox: *bbox,
+            cluster_type: ClusterType::Leaf { start_idx: index }
         }
     }
 
-    fn combine(mut left: Cluster, right: Cluster) -> Self {
+    fn combine(left: Cluster, right: Cluster) -> Self {
         let mut bbox = left.bbox;
-        let boxes = left.boxes() + right.boxes();
+        let boxes = left.boxes + right.boxes;
         bbox.include_bbox(&right.bbox);
         Cluster {
+            boxes,
             bbox,
-            cluster_type: ClusterType::Interior { boxes, left: Box::new(left), right: Box::new(right) }
-        }
-
-    }
-
-    fn boxes(&self) -> u32 {
-        match &self.cluster_type {
-            ClusterType::Leaf { primitive: _ } => 1,
-            ClusterType::Interior { boxes, left, right } => *boxes,
+            cluster_type: ClusterType::Interior { left: Box::new(left), right: Box::new(right) }
         }
     }
 
+    fn collapse(&mut self) -> (u32, u32) {
+        match &mut self.cluster_type {
+            ClusterType::Leaf { start_idx } => (*start_idx, 1),
+            ClusterType::Interior { left, right } => {
+                let (start_idx, dropped_nodes_left) = left.collapse();
+                let (_, dropped_nodes_right) = right.collapse();
+                self.cluster_type = ClusterType::Leaf {
+                    start_idx
+                };
+                (start_idx, dropped_nodes_left + dropped_nodes_right)
+            },
+        }
+    }
 }
 
 impl Bvh {
-    pub fn new_n3(model: &Mesh) -> Self {
-        let mut objects: Vec<_> = model.bboxes().iter().map(|accobj| Cluster::singleton(accobj)).collect();
-        let mut total_nodes = objects.len() as u32;
+    pub fn new(model: &Mesh, _max_prims: u32) -> Self {
         let primitives = (0..model.indices.len()).into_iter().map(|e| e as u32).collect();
+        let mut objects: Vec<_> = model.bboxes().iter().zip(&primitives).map(|(accobj, &idx)| Cluster::singleton(&accobj.bbox, idx)).collect();
+        let mut total_nodes = objects.len() as u32;
+        
         while objects.len() > 1 {
             let mut best = f32::INFINITY;
             let mut left = objects.len();
@@ -110,12 +100,32 @@ impl Bvh {
             total_nodes += 1;
             objects.push(combined);
         }
-        Bvh {
+        let mut bvh = Bvh {
             root: objects.pop().unwrap(),
             max_prims: 1,
             primitives,
             total_nodes,
+        };
+        //bvh.collapse(4);
+        bvh
+    }
+
+    pub fn collapse(&mut self, max_objects: u32) {
+        self.max_prims = max_objects;
+        fn collapse_recursive(node: &mut Cluster, max_objects: u32) -> u32 {
+            if node.boxes <= max_objects {
+                let (_, dropped) = node.collapse();
+                dropped
+            } else if let ClusterType::Interior {left, right} = &mut node.cluster_type {
+                let left_dropped = collapse_recursive(left, max_objects);
+                let right_dropped = collapse_recursive(right, max_objects);
+                left_dropped + right_dropped
+            } else {
+                0
+            }
         }
+        let dropped = collapse_recursive(&mut self.root, max_objects);
+        self.total_nodes -= dropped;
     }
 
     pub fn flatten(&self) -> Vec<GpuNode> {
@@ -129,11 +139,11 @@ impl Bvh {
             *offset += 1;
             let node_offset = *offset;
             match &cluster.cluster_type {
-                ClusterType::Leaf { primitive } => {
-                    linear_node.number_of_prims = 1;
+                ClusterType::Leaf { start_idx: primitive } => {
+                    linear_node.number_of_prims = cluster.boxes;
                     linear_node.offset_ptr = *primitive;
                 },
-                ClusterType::Interior { boxes: _, left, right } => {
+                ClusterType::Interior { left, right } => {
                     linear_node.number_of_prims = 0;
                     flatten_recursive(nodes, left, offset);
                     linear_node.offset_ptr = flatten_recursive(nodes, right, offset);
@@ -158,14 +168,14 @@ impl Bvh {
 #[repr(C, align(16))]
 #[derive(Copy, Clone, Debug, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct GpuNode {
-    min: Vec3f32,
-    offset_ptr: u32,
-    max: Vec3f32,
-    number_of_prims: u32,
+    pub min: Vec3f32,
+    pub offset_ptr: u32,
+    pub max: Vec3f32,
+    pub number_of_prims: u32,
 }
 
 impl GpuNode {
-    fn new(bbox: &Bbox) -> Self{
+    pub fn new(bbox: &Bbox) -> Self{
         GpuNode {
             min: bbox.min,
             offset_ptr: 9999,
@@ -174,8 +184,6 @@ impl GpuNode {
         }
     }
 }
-
-
 
 static_assertions::assert_eq_size!(GpuNode, [u32; 8]);
 
@@ -187,7 +195,7 @@ mod bvh_test {
     #[test]
     fn bvh_new() {
         let model = Mesh::from_obj("res/models/test_object.obj").expect("Failed to load model");
-        let bvh = Bvh::new_n3(&model);
+        let bvh = Bvh::new(&model, 1);
         let flattened = bvh.flatten();
         println!("{:#?}", bvh);
         println!("{:#?}", flattened);
@@ -196,6 +204,6 @@ mod bvh_test {
     #[test]
     fn bvh_new2() {
         let model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
-        let bvh = Bvh::new_n3(&model);
+        let bvh = Bvh::new(&model, 1);
     }
 }

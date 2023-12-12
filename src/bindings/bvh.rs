@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::{bindings::WgslSource, data_structures::bvh::{Bvh, GpuNode}};
+use crate::{bindings::WgslSource, data_structures::{bvh::{Bvh, GpuNode, self}, hlbvh}};
 
 use super::{Bindable, WgslBindDescriptor, IntoGpu};
 
@@ -92,10 +92,18 @@ impl BvhGpu {
     }
 }
 
-impl IntoGpu for Bvh {
+impl IntoGpu for bvh::Bvh {
     type Output = BvhGpu;
 
     fn into_gpu(&self, device: &wgpu::Device) -> Self::Output {
         BvhGpu::new(device, self.flatten(), self.triangles())
+    }
+}
+
+impl IntoGpu for hlbvh::Bvh {
+    type Output = BvhGpu;
+
+    fn into_gpu(&self, device: &wgpu::Device) -> Self::Output {
+        BvhGpu::new(device, self.flatten(), &self.triangles())
     }
 }

@@ -5,7 +5,7 @@ use crate::{
     data_structures::{
         bbox::Bbox,
         bsp_tree::{AccObj, BspTree},
-        vector::{vec3f32, Vec4f32, Vec4u32, vec4u32, vec4f32}, bvh::Bvh,
+        vector::{vec3f32, Vec4f32, Vec4u32, vec4u32, vec4f32}, hlbvh::{Bvh, self},
     },
 };
 
@@ -211,7 +211,7 @@ impl Mesh {
     }
 
     pub fn bvh(&self) -> Bvh {
-        let bvh = Bvh::new_n3(&self);
+        let bvh = hlbvh::Bvh::new(&self, 4);
         println!("{:#?}", bvh);
         println!("{:#?}", bvh.flatten());
         println!("{:#?}", bvh.triangles());

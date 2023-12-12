@@ -159,6 +159,7 @@ fn intersect_bvh(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
                 
             // internal node
             } else {
+                // TODO: Can store distance information to skip one of these nodes
                 stack_push_node(current_node_index + 1u);
                 // TODO: I HAVE TO SUBSTRACT 1 HERE BECAUSE I DID NOT
                 // SET THE OFFSET_PTR CORRECTLY IN THE REFERENCE IMPL

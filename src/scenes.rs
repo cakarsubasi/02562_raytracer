@@ -395,17 +395,17 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             ..Default::default()
         },
         SceneDescriptor {
-            name: String::from("Project"),
+            name: String::from("Project: Quad"),
             shader: PathBuf::from("res/shaders/project.wgsl"),
-            model: Some(cornell_box_with_blocks_path.clone()),
-            camera: cornell_box_camera.clone(),
+            model: Some(plane_object_path.clone()),
+            camera: basic_scene_camera.clone(),
             res: (512, 512),
             vertex_type: VertexType::Combined,
             traverse_type: TraverseType::Bvh,
             ..Default::default()
         },
         SceneDescriptor {
-            name: String::from("Project 2"),
+            name: String::from("Project: Three Quads"),
             shader: PathBuf::from("res/shaders/project.wgsl"),
             model: Some(test_object_path.clone()),
             camera: basic_scene_camera.clone(),
@@ -415,10 +415,30 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             ..Default::default()
         },
         SceneDescriptor {
-            name: String::from("Project 3"),
+            name: String::from("Project: Cornell Box"),
             shader: PathBuf::from("res/shaders/project.wgsl"),
-            model: Some(plane_object_path.clone()),
-            camera: basic_scene_camera.clone(),
+            model: Some(cornell_box_with_blocks_path.clone()),
+            camera: cornell_box_camera.clone(),
+            res: (512, 512),
+            vertex_type: VertexType::Combined,
+            traverse_type: TraverseType::Bvh,
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("Project: Utah Teapot"),
+            shader: PathBuf::from("res/shaders/project.wgsl"),
+            model: Some(teapot_path.clone()),
+            camera: utah_teapot_camera.clone(),
+            res: (800, 450),
+            vertex_type: VertexType::Combined,
+            traverse_type: TraverseType::Bvh,
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("Project: Bunny"),
+            shader: PathBuf::from("res/shaders/project.wgsl"),
+            model: Some(bunny_path.clone()),
+            camera: bunny_camera.clone(),
             res: (512, 512),
             vertex_type: VertexType::Combined,
             traverse_type: TraverseType::Bvh,
