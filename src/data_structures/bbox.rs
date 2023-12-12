@@ -90,7 +90,7 @@ impl Bbox {
 
     /// Get the center of the bounding box
     pub fn center(&self) -> Vec3f32 {
-        (self.min - self.max) * 0.5
+        (self.min + self.max) * 0.5
     }
 
     /// Get the center of the given dimension of the bounding box
@@ -99,6 +99,7 @@ impl Bbox {
     }
 
     /// Get the extents of the bounding box
+    /// also called the diagonal
     pub fn extent(&self) -> Vec3f32 {
         self.max - self.min
     }
@@ -162,5 +163,23 @@ impl Bbox {
         distance.magnitude()
     }
 
+    /// Offset function (from the PBR book)
+    /// Return the relative position of a point inside of the box.
+    /// 
+    /// The minimum corner will have an offset of (0, 0, 0) and
+    /// the maximum corner will have an offset of (1, 1, 1).
+    pub fn offset(&self, point: Vec3f32) -> Vec3f32 {
+        let mut o = point - self.min;
+        if self.max.0 > self.min.0 {
+            o.0 /= self.max.0 - self.min.0;
+        }
+        if self.max.1 > self.min.1 {
+            o.1 /= self.max.1 - self.min.1;
+        }
+        if self.max.2 > self.min.2 {
+            o.2 /= self.max.2 - self.min.2;
+        }
+        o
+    }
 
 }

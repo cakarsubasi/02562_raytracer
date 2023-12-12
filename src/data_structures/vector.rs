@@ -1,4 +1,4 @@
-use std::ops::{Add, Index, IndexMut, Mul, Sub, Div};
+use std::ops::{Add, Index, IndexMut, Mul, Sub, Div, Not};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Default, bytemuck::Zeroable)]
@@ -188,6 +188,56 @@ where
 {
     fn from(value: [T; 3]) -> Self {
         Self(value[0], value[1], value[2])
+    }
+}
+
+// comparisons
+
+impl<T> Vec3<T> where T: PartialOrd<T> {
+    pub fn lt(&self, rhs: Vec3<T>) -> Vec3<bool> {
+        let x = self.0 < rhs.0;
+        let y = self.1 < rhs.1;
+        let z = self.2 < rhs.2;
+        Vec3::<bool>(x, y, z)
+    }
+
+    pub fn le(&self, rhs: Vec3<T>) -> Vec3<bool> {
+        let x = self.0 <= rhs.0;
+        let y = self.1 <= rhs.1;
+        let z = self.2 <= rhs.2;
+        Vec3::<bool>(x, y, z)
+    }
+
+    pub fn gt(&self, rhs: Vec3<T>) -> Vec3<bool> {
+        let x = self.0 > rhs.0;
+        let y = self.1 > rhs.1;
+        let z = self.2 > rhs.2;
+        Vec3::<bool>(x, y, z)
+    }
+
+    pub fn ge(&self, rhs: Vec3<T>) -> Vec3<bool> {
+        let x = self.0 >= rhs.0;
+        let y = self.1 >= rhs.1;
+        let z = self.2 >= rhs.2;
+        Vec3::<bool>(x, y, z)
+    }
+}
+
+impl<T> Vec3<T> where T: Into<bool> + Copy {
+    pub fn all(&self) -> bool {
+        self.0.into() && self.1.into() && self.2.into()
+    }
+
+    pub fn any(&self) -> bool {
+        self.0.into() || self.1.into() || self.2.into()
+    }
+}
+
+impl<T> Not for Vec3<T> where T: Into<bool> {
+    type Output = Vec3<bool>;
+
+    fn not(self) -> Self::Output {
+        Vec3::<bool>(!self.0.into(), !self.1.into(), !self.2.into())
     }
 }
 
