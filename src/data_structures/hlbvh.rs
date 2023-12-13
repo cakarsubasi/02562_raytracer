@@ -1,5 +1,5 @@
 use rdst::{RadixKey, RadixSort};
-use std::cmp::Ord;
+use std::{cmp::Ord, fs::File, io::Write};
 
 use crate::{mesh::Mesh, data_structures::vector::vec3f32};
 
@@ -36,11 +36,13 @@ impl Bvh {
                 debug_assert!(centroid_offset.ge(vec3f32(0.0, 0.0, 0.0)).all());
                 debug_assert!(centroid_offset.le(vec3f32(1.0, 1.0, 1.0)).all());
                 let offset = centroid_offset * morton_scale as f32;
-                println!("{offset:?}");
                 morton.morton_code = encode_morton_3(offset.0, offset.1, offset.2);
             });
 
-        morton_primitives.radix_sort_unstable();
+        morton_primitives.sort_unstable();
+        //morton_primitives.radix_sort_unstable();
+        println!("completed radix sort");
+
 
         let mut treelets_to_build = vec![];
         let mask = 0b00111111111111_0000000000_00000000u32;
@@ -61,6 +63,8 @@ impl Bvh {
             end += 1;
         }
 
+        println!("Initialized treelets: {}", treelets_to_build.len());
+
         let mut total_nodes = 0;
         let mut ordered_prims_offset = 0;
         treelets_to_build.iter_mut().for_each(|treelet| {
@@ -79,6 +83,7 @@ impl Bvh {
             treelet.root = node;
             total_nodes += nodes_created;
         });
+        println!("Built treelets");
         // Use SAH or some other method to collapse nodes into a single BVH
         let root = build_sah(treelets_to_build, &mut total_nodes, &mut ordered_primitives);
 
@@ -92,7 +97,6 @@ impl Bvh {
         }
     }
 
-    // TODO
     pub fn flatten(&self) -> Vec<GpuNode> {
         let mut nodes = vec![GpuNode::new(&self.root.bbox); self.total_nodes as usize];
 
@@ -123,7 +127,6 @@ impl Bvh {
     }
 
     pub fn triangles(&self) -> Vec<u32> {
-        // TODO
         self.primitives.iter().map(|accobj| accobj.idx).collect()
     }
 }
@@ -251,7 +254,7 @@ impl LBvhTreeLet {
         bit_index: i32,
         max_prims_in_node: usize,
     ) -> BvhBuildNode {
-        if bit_index == -1 || num_primitives < max_prims_in_node {
+        if bit_index <= -1 || num_primitives < max_prims_in_node {
             let mut bbox = Bbox::new();
             // will need atomics here
             let first_prim_offset = *ordered_prims_offset;
@@ -259,7 +262,6 @@ impl LBvhTreeLet {
 
             for i in 0..num_primitives {
                 let primitive_index = morton_primitives[morton_offset + i].index;
-                // todo update ordered primitives
                 ordered_primitives[first_prim_offset + i] = primitives[primitive_index as usize];
                 bbox.include_bbox(&primitives[primitive_index as usize].bbox);
             }
@@ -280,10 +282,7 @@ impl LBvhTreeLet {
 
             let mut size_maybe = num_primitives.checked_sub(2);
             let mut first = 1;
-            loop {
-                if size_maybe.is_none() {
-                    break;
-                }
+            while size_maybe.is_some_and(|size| size > 0) {
                 let size = size_maybe.unwrap();
                 let half = size >> 1;
                 let middle = first + half;
@@ -305,7 +304,7 @@ impl LBvhTreeLet {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct MortonPrimitive {
     pub index: u32,
     pub morton_code: u32, // use 30 bits
@@ -323,8 +322,31 @@ impl MortonPrimitive {
 impl RadixKey for MortonPrimitive {
     const LEVELS: usize = 4;
 
+    #[inline]
     fn get_level(&self, level: usize) -> u8 {
         (self.morton_code >> (level * 8)) as u8
+    }
+}
+
+impl Eq for MortonPrimitive {
+
+}
+
+impl Ord for MortonPrimitive {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.morton_code.cmp(&other.morton_code)
+    }
+}
+
+impl PartialEq for MortonPrimitive {
+    fn eq(&self, other: &Self) -> bool {
+        self.morton_code == other.morton_code
+    }
+}
+
+impl PartialOrd for MortonPrimitive {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.morton_code.cmp(&other.morton_code))
     }
 }
 
@@ -355,8 +377,8 @@ mod bvh_test {
         let model = Mesh::from_obj("res/models/test_object.obj").expect("Failed to load model");
         let bvh = Bvh::new(&model, 4);
         let flattened = bvh.flatten();
-        println!("{:#?}", bvh);
-        println!("{:#?}", flattened);
+        //println!("{:#?}", bvh);
+        //println!("{:#?}", flattened);
     }
 
     #[test]
@@ -364,13 +386,25 @@ mod bvh_test {
         let model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
         let bvh = Bvh::new(&model, 4);
         let flattened = bvh.flatten();
-        println!("{:#?}", bvh);
-        println!("{:#?}", flattened);
     }
 
     #[test]
     fn bvh_new3() {
         let model = Mesh::from_obj("res/models/teapot.obj").expect("Failed to load model");
         let bvh = Bvh::new(&model, 4);
+        let flattened = bvh.flatten();
+    }
+
+    #[test]
+    fn bvh_new4() {
+        let model = Mesh::from_obj("res/models/bunny.obj").expect("Failed to load model");
+        let bvh = Bvh::new(&model, 4);
+        let flattened = bvh.flatten();
+    }
+    #[test]
+    fn bvh_new5() {
+        let model = Mesh::from_obj("res/models/dragon.obj").expect("Failed to load model");
+        let bvh = Bvh::new(&model, 4);
+        let flattened = bvh.flatten();
     }
 }
