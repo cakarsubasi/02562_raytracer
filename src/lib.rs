@@ -326,13 +326,13 @@ fn rendering_thread(
     let mut should_render = true;
     let mut progressive = false;
 
-    let mut render_stats = RenderStats::new();
+    let mut render_statistics = RenderStats::new();
 
     loop {
         let current_iter = render_state.uniform.get_iteration();
         let max_iter = render_state.uniform.max_iterations;
         if should_render && (progressive && current_iter < max_iter) || (should_render && !progressive) {
-            render_stats.begin_capture();
+            render_statistics.begin_capture();
             thread::scope(|s| {
                 s.spawn(|| {
                     match render_state.render() {
@@ -346,16 +346,16 @@ fn rendering_thread(
                         // All other errors (Outdated, Timeout) should be resolved by the next frame
                         Err(_) => {},
                     }
-                    render_stats.end_capture();
+                    render_statistics.end_capture();
 
                     if progressive {
                         println!("Current iter: {}/{}", current_iter, max_iter);
                         render_state.uniform.increase_iteration();
                     }
 
-                    if render_stats.total > std::time::Duration::from_secs(5) {
-                        println!("{render_stats}");
-                        render_stats.reset();
+                    if render_statistics.total > std::time::Duration::from_secs(5) {
+                        println!("{render_statistics}");
+                        render_statistics.reset();
                     }
                 });
             });
@@ -363,7 +363,8 @@ fn rendering_thread(
         }
 
         loop {
-            match receiver.recv_timeout(std::time::Duration::from_millis(0)) {
+            // This will be the end of me with how much it actually affects performance
+            match receiver.recv_timeout(std::time::Duration::from_millis(1)) {
                 Err(RecvTimeoutError::Timeout) => break,
                 Err(_err) => break,
                 Ok(command) => {
@@ -465,7 +466,7 @@ fn rendering_thread(
                         Command::LoadScene { idx } => match render_state.load_scene(&scenes[idx]) {
                             Ok(_) => 
                             {
-                                render_stats.reset();
+                                render_statistics.reset();
                                 render_state.uniform.reset_iteration();
                                 render_state.uniform.max_iterations = max_iter;
                                 eprintln!("Successfully loaded new scene: {:?}", scenes[idx])

@@ -1613,6 +1613,7 @@ dependencies = [
  "pollster",
  "rand",
  "rand_pcg",
+ "rayon",
  "rdst",
  "rfd",
  "static_assertions",

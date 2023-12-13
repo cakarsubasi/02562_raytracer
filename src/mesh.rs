@@ -211,7 +211,11 @@ impl Mesh {
     }
 
     pub fn bvh(&self) -> Bvh {
-        hlbvh::Bvh::new(&self, 4)
+        let start = std::time::Instant::now();
+        let bvh = hlbvh::Bvh::new(&self, 4);
+        let passed = std::time::Instant::now() - start;
+        println!("built BVH in {} ms", passed.as_micros() as f64 / 1000.0);
+        bvh
     }
 
     #[allow(dead_code)]

@@ -1,5 +1,6 @@
 use rdst::{RadixKey, RadixSort};
-use std::cmp::Ord;
+use std::{cmp::Ord, sync::atomic::{AtomicUsize, AtomicU32}};
+use rayon::prelude::*;
 
 use crate::mesh::Mesh;
 
@@ -44,7 +45,7 @@ impl Bvh {
             // code, I am just going to put this behind the release flag since it does work in that case
             morton_primitives.radix_sort_unstable();
         }
-        println!("completed sort");
+        //println!("completed sort");
 
         let mut treelets_to_build = vec![];
         let mask = 0b00111111111111_0000000000_00000000u32;
@@ -64,11 +65,11 @@ impl Bvh {
             end += 1;
         }
 
-        println!("Initialized treelets: {}", treelets_to_build.len());
+        //println!("Initialized treelets: {}", treelets_to_build.len());
 
-        let mut total_nodes = 0;
-        let mut ordered_prims_offset = 0;
-        treelets_to_build.iter_mut().for_each(|treelet| {
+        let total_nodes = AtomicU32::new(0);
+        let ordered_prims_offset = AtomicUsize::new(0);
+        treelets_to_build.par_iter_mut().for_each(|treelet| {
             let mut nodes_created = 0;
             let first_bit_index = 29 - 12;
             let node = LBvhTreeLet::emit_lbvh(
@@ -77,24 +78,26 @@ impl Bvh {
                 treelet.start_index, 
                 treelet.num_primitives, 
                 &mut nodes_created, 
-                &mut ordered_primitives,
-                &mut ordered_prims_offset,
+                ordered_primitives.as_ptr(),
+                &ordered_prims_offset,
                 first_bit_index, 
                 max_prims as usize);
             treelet.root = node;
-            total_nodes += nodes_created;
+            total_nodes.fetch_add(nodes_created, std::sync::atomic::Ordering::Relaxed);
+            //total_nodes += nodes_created;
         });
-        println!("Built treelets");
+        //println!("Built treelets");
         // Use SAH or some other method to collapse nodes into a single BVH
+        let mut total_nodes = total_nodes.fetch_add(0, std::sync::atomic::Ordering::Relaxed);
         let root = build_upper_tree(treelets_to_build, &mut total_nodes, &mut ordered_primitives);
 
-        println!("Successfully built BVH");
+        //println!("Successfully built BVH");
 
         Self {
             root,
             max_prims,
             primitives: ordered_primitives,
-            total_nodes: total_nodes,
+            total_nodes,
         }
     }
 
@@ -249,20 +252,20 @@ impl LBvhTreeLet {
         morton_offset: usize,
         num_primitives: usize,
         total_nodes: &mut u32,
-        ordered_primitives: &mut [AccObj],
-        ordered_prims_offset: &mut usize,
+        ordered_primitives: *const AccObj,
+        ordered_prims_offset: &AtomicUsize,
         bit_index: i32,
         max_prims_in_node: usize,
     ) -> BvhBuildNode {
         if bit_index <= -1 || num_primitives < max_prims_in_node {
             let mut bbox = Bbox::new();
             // will need atomics here
-            let first_prim_offset = *ordered_prims_offset;
-            *ordered_prims_offset += num_primitives;
+            let first_prim_offset = ordered_prims_offset.fetch_add(num_primitives, std::sync::atomic::Ordering::Relaxed);
+            //*ordered_prims_offset += num_primitives;
 
             for i in 0..num_primitives {
                 let primitive_index = morton_primitives[morton_offset + i].index;
-                ordered_primitives[first_prim_offset + i] = primitives[primitive_index as usize];
+                unsafe {*ordered_primitives.cast_mut().add(first_prim_offset + i) = primitives[primitive_index as usize]; }
                 bbox.include_bbox(&primitives[primitive_index as usize].bbox);
             }
 
@@ -426,10 +429,14 @@ mod bvh_test {
         let bvh = Bvh::new(&model, 4);
         let _flattened = bvh.flatten();
     }
+
     #[test]
     fn bvh_new5() {
         let model = Mesh::from_obj("res/models/dragon.obj").expect("Failed to load model");
+        let start = std::time::Instant::now();
         let bvh = Bvh::new(&model, 4);
         let _flattened = bvh.flatten();
+        let passed = std::time::Instant::now() - start;
+        println!("built BVH in {} ms", passed.as_micros() as f64 / 1000.0);
     }
 }
