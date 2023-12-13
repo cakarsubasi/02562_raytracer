@@ -4,8 +4,8 @@ use crate::{
     bindings::storage_mesh::StorageMeshGpu,
     data_structures::{
         bbox::Bbox,
-        bsp_tree::{AccObj, BspTree},
-        vector::{vec3f32, Vec4f32, Vec4u32, vec4u32, vec4f32}, hlbvh::{Bvh, self},
+        bsp_tree::BspTree,
+        vector::{vec3f32, Vec4f32, Vec4u32, vec4u32, vec4f32}, hlbvh::{Bvh, self}, accobj::AccObj,
     },
 };
 

@@ -8,7 +8,7 @@ use std::fmt::Debug;
 
 use super::{
     bbox::{Bbox, BboxGpu},
-    vector::Vec4u32,
+    vector::Vec4u32, accobj::{AccObj, Split},
 };
 
 const NODE_TYPE_LEAF: u32 = 3u32;
@@ -20,41 +20,6 @@ pub struct BspTree {
     root: Node,
     max_depth: u32,
     bbox: Bbox,
-}
-
-/// Intermediate data structure to pass
-/// indexed bounding boxes to the BSP Tree
-///
-/// Each index points towards the primitive (in this case the triangle)
-/// in the index buffer that corresponds to the bbox
-#[derive(Debug, Copy, Clone)]
-pub struct AccObj {
-    pub idx: u32,
-    pub bbox: Bbox,
-}
-
-impl AccObj {
-    pub fn new(idx: u32, bbox: Bbox) -> Self {
-        Self { idx, bbox }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-enum Split {
-    AxisX = 0,
-    AxisY = 1,
-    AxisZ = 2,
-}
-
-impl From<u32> for Split {
-    fn from(value: u32) -> Self {
-        match value {
-            0 => Split::AxisX,
-            1 => Split::AxisY,
-            2 => Split::AxisZ,
-            _ => panic!("unexpected input {value}"),
-        }
-    }
 }
 
 #[derive(Debug)]

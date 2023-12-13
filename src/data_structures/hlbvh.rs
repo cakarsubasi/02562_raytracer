@@ -1,9 +1,9 @@
 use rdst::{RadixKey, RadixSort};
-use std::{cmp::Ord, fs::File, io::Write};
+use std::cmp::Ord;
 
-use crate::{mesh::Mesh, data_structures::vector::vec3f32};
+use crate::mesh::Mesh;
 
-use super::{bbox::Bbox, bsp_tree::AccObj, bvh::GpuNode};
+use super::{bbox::Bbox, accobj::{AccObj, Split}, bvh::GpuNode};
 
 #[derive(Debug)]
 pub struct Bvh {
@@ -11,7 +11,6 @@ pub struct Bvh {
     max_prims: u32,
     primitives: Vec<AccObj>,
     total_nodes: u32,
-    //sorted_prims: Vec<MortonPrimitive>,
 }
 
 impl Bvh {
@@ -33,16 +32,19 @@ impl Bvh {
             .for_each(|(idx, morton)| {
                 morton.index = idx as u32;
                 let centroid_offset = bound.offset(primitives[idx].bbox.center());
-                debug_assert!(centroid_offset.ge(vec3f32(0.0, 0.0, 0.0)).all());
-                debug_assert!(centroid_offset.le(vec3f32(1.0, 1.0, 1.0)).all());
                 let offset = centroid_offset * morton_scale as f32;
                 morton.morton_code = encode_morton_3(offset.0, offset.1, offset.2);
             });
 
-        morton_primitives.sort_unstable();
-        //morton_primitives.radix_sort_unstable();
-        println!("completed radix sort");
-
+        if cfg!(debug_assertions) {
+            morton_primitives.sort_unstable();
+        } else {
+            // It appears that the rdst crate relies on well defined unsigned underflow behavior that panics
+            // on Rust debug builds, since I can't do much about this without editing that crate's source
+            // code, I am just going to put this behind the release flag since it does work in that case
+            morton_primitives.radix_sort_unstable();
+        }
+        println!("completed sort");
 
         let mut treelets_to_build = vec![];
         let mask = 0b00111111111111_0000000000_00000000u32;
@@ -85,7 +87,7 @@ impl Bvh {
         });
         println!("Built treelets");
         // Use SAH or some other method to collapse nodes into a single BVH
-        let root = build_sah(treelets_to_build, &mut total_nodes, &mut ordered_primitives);
+        let root = build_upper_tree(treelets_to_build, &mut total_nodes, &mut ordered_primitives);
 
         println!("Successfully built BVH");
 
@@ -132,13 +134,13 @@ impl Bvh {
 }
 
 #[inline]
-fn build_sah(build_nodes: Vec<LBvhTreeLet>, total_nodes: &mut u32, ordered_prims: &mut [AccObj]) -> BvhBuildNode {
+fn build_upper_tree(build_nodes: Vec<LBvhTreeLet>, total_nodes: &mut u32, _ordered_prims: &mut [AccObj]) -> BvhBuildNode {
     // move out of build_nodes
     let build_nodes: Vec<_> = build_nodes.into_iter().map(|treelet| treelet.root).collect();
-    build_recursive(build_nodes, total_nodes, ordered_prims, &mut 0)
+    collapse_build_nodes_recursive(build_nodes, total_nodes) //, ordered_prims, &mut 0)
 }
 
-fn build_recursive(mut build_nodes: Vec<BvhBuildNode>, total_nodes: &mut u32, ordered_prims: &mut [AccObj], ordered_prims_offset: &mut u32) -> BvhBuildNode {
+fn collapse_build_nodes_recursive(mut build_nodes: Vec<BvhBuildNode>, total_nodes: &mut u32 /*, ordered_prims: &mut [AccObj], ordered_prims_offset: &mut u32 */ ) -> BvhBuildNode {
 
     // compute overall bound
     let mut bound = Bbox::new();
@@ -148,8 +150,6 @@ fn build_recursive(mut build_nodes: Vec<BvhBuildNode>, total_nodes: &mut u32, or
 
     // create leaf
     if build_nodes.len() == 1 {
-        // need to do anything else here?
-
         build_nodes.pop().unwrap()
     } else {
         // create split using center
@@ -161,11 +161,11 @@ fn build_recursive(mut build_nodes: Vec<BvhBuildNode>, total_nodes: &mut u32, or
 
         let (child0_nodes, child1_nodes) = mid_partition(build_nodes, dimension);
 
-        let child0 = build_recursive(child0_nodes, total_nodes, ordered_prims, ordered_prims_offset);
-        let child1 = build_recursive(child1_nodes, total_nodes, ordered_prims, ordered_prims_offset);
+        let child0 = collapse_build_nodes_recursive(child0_nodes, total_nodes); //, ordered_prims, ordered_prims_offset);
+        let child1 = collapse_build_nodes_recursive(child1_nodes, total_nodes); //, ordered_prims, ordered_prims_offset);
         
         *total_nodes += 1;
-        BvhBuildNode::new_internal(dimension, child0, child1)
+        BvhBuildNode::new_internal(dimension.into(), child0, child1)
     }
 }
 
@@ -195,7 +195,7 @@ enum BvhBuildNodeType {
         first_prim_offset: u32,
     },
     Interior {
-        split: u32,
+        split: Split,
         left: Box<BvhBuildNode>,
         right: Box<BvhBuildNode>,
     },
@@ -211,7 +211,7 @@ impl BvhBuildNode {
         }
     }
 
-    fn new_internal(axis: u32, child0: BvhBuildNode, child1: BvhBuildNode) -> Self {
+    fn new_internal(axis: Split, child0: BvhBuildNode, child1: BvhBuildNode) -> Self {
         let mut bbox = child0.bbox;
         bbox.include_bbox(&child1.bbox);
         Self {
@@ -299,7 +299,7 @@ impl LBvhTreeLet {
             let axis = (bit_index % 3) as u32;
 
             *total_nodes += 1;
-            BvhBuildNode::new_internal(axis, left, right)
+            BvhBuildNode::new_internal(axis.into(), left, right)
         }
     }
 }
@@ -376,7 +376,7 @@ mod bvh_test {
     fn bvh_new() {
         let model = Mesh::from_obj("res/models/test_object.obj").expect("Failed to load model");
         let bvh = Bvh::new(&model, 4);
-        let flattened = bvh.flatten();
+        let _flattened = bvh.flatten();
         //println!("{:#?}", bvh);
         //println!("{:#?}", flattened);
     }
@@ -385,26 +385,26 @@ mod bvh_test {
     fn bvh_new2() {
         let model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
         let bvh = Bvh::new(&model, 4);
-        let flattened = bvh.flatten();
+        let _flattened = bvh.flatten();
     }
 
     #[test]
     fn bvh_new3() {
         let model = Mesh::from_obj("res/models/teapot.obj").expect("Failed to load model");
         let bvh = Bvh::new(&model, 4);
-        let flattened = bvh.flatten();
+        let _flattened = bvh.flatten();
     }
 
     #[test]
     fn bvh_new4() {
         let model = Mesh::from_obj("res/models/bunny.obj").expect("Failed to load model");
         let bvh = Bvh::new(&model, 4);
-        let flattened = bvh.flatten();
+        let _flattened = bvh.flatten();
     }
     #[test]
     fn bvh_new5() {
         let model = Mesh::from_obj("res/models/dragon.obj").expect("Failed to load model");
         let bvh = Bvh::new(&model, 4);
-        let flattened = bvh.flatten();
+        let _flattened = bvh.flatten();
     }
 }
