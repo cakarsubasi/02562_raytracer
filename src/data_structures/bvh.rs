@@ -1,4 +1,4 @@
-use crate::mesh::Mesh;
+use crate::{mesh::Mesh, data_structures::hlbvh::GpuNode};
 
 use super::{bbox::Bbox, vector::Vec3f32};
 
@@ -164,28 +164,6 @@ impl Bvh {
     }
 }
 
-
-#[repr(C, align(16))]
-#[derive(Copy, Clone, Debug, bytemuck::Zeroable, bytemuck::Pod)]
-pub struct GpuNode {
-    pub min: Vec3f32,
-    pub offset_ptr: u32,
-    pub max: Vec3f32,
-    pub number_of_prims: u32,
-}
-
-impl GpuNode {
-    pub fn new(bbox: &Bbox) -> Self{
-        GpuNode {
-            min: bbox.min,
-            offset_ptr: 9999,
-            max: bbox.max,
-            number_of_prims: 9999,
-        }
-    }
-}
-
-static_assertions::assert_eq_size!(GpuNode, [u32; 8]);
 
 #[cfg(test)]
 mod bvh_test {

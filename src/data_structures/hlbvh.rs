@@ -3,7 +3,7 @@ use std::cmp::Ord;
 
 use crate::mesh::Mesh;
 
-use super::{bbox::Bbox, accobj::{AccObj, Split}, bvh::GpuNode};
+use super::{bbox::Bbox, accobj::{AccObj, Split}, vector::Vec3f32};
 
 #[derive(Debug)]
 pub struct Bvh {
@@ -56,8 +56,7 @@ impl Bvh {
                     != (morton_primitives[end].morton_code & mask))
             {
                 let num_primitives = end - start;
-                let max_bvh_nodes = 2 * num_primitives - 1;
-                let treelet = LBvhTreeLet::new(start, num_primitives, max_bvh_nodes);
+                let treelet = LBvhTreeLet::new(start, num_primitives);
                 treelets_to_build.push(treelet);
 
                 start = end;
@@ -115,7 +114,9 @@ impl Bvh {
                     linear_node.offset_ptr = *first_prim_offset;
                 },
                 BvhBuildNodeType::Interior { split, left, right  } => {
-                    linear_node.number_of_prims = 0;
+                    let number_of_prims = 0;
+                    //let number_of_prims = (*split as u32) << 16;
+                    linear_node.number_of_prims = number_of_prims;
                     flatten_recursive(nodes, left, offset);
                     linear_node.offset_ptr = flatten_recursive(nodes, right, offset);
                 },
@@ -229,16 +230,15 @@ impl BvhBuildNode {
 pub struct LBvhTreeLet {
     start_index: usize,
     num_primitives: usize,
-    max_nodes: usize,
+    //max_nodes: usize,
     root: BvhBuildNode,
 }
 
 impl LBvhTreeLet {
-    fn new(start_index: usize, num_primitives: usize, max_nodes: usize) -> Self {
+    fn new(start_index: usize, num_primitives: usize) -> Self {
         LBvhTreeLet {
             start_index,
             num_primitives,
-            max_nodes,
             root: BvhBuildNode::new_leaf(9999, 9999, Bbox::new()),
         }
     }
@@ -366,6 +366,31 @@ fn left_shift_3(mut x: u32) -> u32 {
 fn encode_morton_3(x: f32, y: f32, z: f32) -> u32 {
     (left_shift_3(z as u32) << 2) | (left_shift_3(y as u32) << 1) | left_shift_3(x as u32)
 }
+
+/// GPU Node
+/// 
+
+#[repr(C, align(16))]
+#[derive(Copy, Clone, Debug, bytemuck::Zeroable, bytemuck::Pod)]
+pub struct GpuNode {
+    pub min: Vec3f32,
+    pub offset_ptr: u32,
+    pub max: Vec3f32,
+    pub number_of_prims: u32,
+}
+
+impl GpuNode {
+    pub fn new(bbox: &Bbox) -> Self{
+        GpuNode {
+            min: bbox.min,
+            offset_ptr: 9999,
+            max: bbox.max,
+            number_of_prims: 9999,
+        }
+    }
+}
+
+static_assertions::assert_eq_size!(GpuNode, [u32; 8]);
 
 #[cfg(test)]
 mod bvh_test {

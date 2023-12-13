@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::{bindings::WgslSource, data_structures::{bvh::{Bvh, GpuNode, self}, hlbvh}};
+use crate::{bindings::WgslSource, data_structures::{bvh::{self}, hlbvh::{self, GpuNode}}};
 
 use super::{Bindable, WgslBindDescriptor, IntoGpu};
 

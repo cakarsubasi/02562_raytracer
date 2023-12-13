@@ -12,28 +12,8 @@ struct BvhNode {
     n_primitives: u32, // number of primitives
 };
 
-fn intersect_bb(ray_dir_inv: vec3f, ray_orig: vec3f, bbox: BvhNode) -> bool {
-    let t0 = vec3f(0.0);
-    let t1 = vec3f(F32_MAX);
-
-    let near = (bbox.bbox_min - ray_orig) * ray_dir_inv;
-    let far  = (bbox.bbox_max - ray_orig) * ray_dir_inv;
-
-    let near1 = select(near, far, near > far);
-    let far1 = select(far, near, near > far);
-
-    let t0_test: vec3<bool> = near1 > t0;
-    let t1_test: vec3<bool> = far1 < t1;
-
-    let t0_res = near * vec3f(t0_test);
-    let t1_res = far * vec3f(t1_test);
-    if ( any(t0_res > t1_res) ) {
-        return false;
-    }
-
-    return true;
-}
-
+// ~12.5 ms
+// Somehow this long function is faster than everything else I could write
 fn intersect_bb2(ray_dir_inv: vec3f, ray_orig: vec3f, bbox: BvhNode) -> bool {
     var t0 = 0.0;
     var t1 = F32_MAX;
@@ -103,6 +83,49 @@ fn intersect_bb2(ray_dir_inv: vec3f, ray_orig: vec3f, bbox: BvhNode) -> bool {
     return true;
 }
 
+// ~15.5 ms
+fn intersect_bb3(ray_dir_inv: vec3f, ray_orig: vec3f, bbox: BvhNode) -> bool {
+    var t0 = 0.0;
+    var t1 = F32_MAX;
+
+    let near_i = (bbox.bbox_min - ray_orig) * ray_dir_inv;
+    let far_i  = (bbox.bbox_max - ray_orig) * ray_dir_inv;
+    let selection = near_i > far_i;
+    let near = select(near_i, far_i, selection);
+    let far = select(far_i, near_i, selection);
+
+    // y
+    let tyNear = near.y;
+    let tyFar = far.y;
+    t0 = select(t0, tyNear, tyNear > t0);
+    t1 = select(t1, tyFar, tyFar < t1); 
+    if (t0 > t1) {
+        return false;
+    }
+
+    // x
+    let txNear = near.x;
+    let txFar = far.x;
+    t0 = select(t0, txNear, txNear > t0);
+    t1 = select(t1, txFar, txFar < t1); 
+    if (t0 > t1) {
+        return false;
+    }
+    
+    // z
+    let tzNear = near.z;
+    let tzFar = far.z;
+    t0 = select(t0, tzNear, tzNear > t0);
+    t1 = select(t1, tzFar, tzFar < t1); 
+    if (t0 > t1) {
+        return false;
+    }
+
+    return true;
+}
+
+
+
 
 var<private> node_stack: array<u32, MAX_LEVEL>;
 var<private> node_stack_top: u32;
@@ -110,10 +133,12 @@ var<private> node_stack_top: u32;
 fn stack_init() {
     node_stack_top = 0u;
 }
+
 fn stack_push_node(value: u32) {
     node_stack[node_stack_top] = value;
     node_stack_top += 1u;
 }
+
 fn stack_pop_node() -> u32 {
     if (node_stack_top == 0u) {
         // crash the GPU
@@ -160,7 +185,7 @@ fn intersect_bvh(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
             // internal node
             } else {
                 // TODO: Can store distance information to skip one of these nodes
-                stack_push_node(current_node_index + 1u);
+                stack_push_node(current_node_index + 1u);                
                 // TODO: I HAVE TO SUBSTRACT 1 HERE BECAUSE I DID NOT
                 // SET THE OFFSET_PTR CORRECTLY IN THE REFERENCE IMPL
                 // GOTTA BE CAREFUL OF THAT
