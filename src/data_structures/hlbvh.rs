@@ -1,5 +1,5 @@
 use rayon::prelude::*;
-use rdst::{RadixKey, RadixSort};
+use rdst::{RadixKey, RadixSort, RadixSortBuilder};
 use std::{
     cmp::Ord,
     sync::atomic::{AtomicU32, Ordering},
@@ -31,7 +31,7 @@ impl Bvh {
     /// Construct a BVH using the Hierarchical Linear BVH method described in the PBR book:
     /// https://www.pbr-book.org/4ed/Primitives_and_Intersection_Acceleration/Bounding_Volume_Hierarchies
     ///
-    pub fn new(model: &Mesh, max_prims: u32) -> Self {
+    pub fn new(model: &Mesh, max_prims: u32, single_threaded: bool) -> Self {
         let primitives = model.bboxes();
         // calculate the overall boundary for morton code generation
         let mut bound = Bbox::new();
@@ -67,7 +67,12 @@ impl Bvh {
             // It appears that the rdst crate relies on well defined unsigned underflow behavior that panics
             // on Rust debug builds, since I can't do much about this without editing that crate's source
             // code, I am just going to put this behind the release flag since it does work in that case
-            morton_primitives.radix_sort_unstable();
+            if single_threaded {
+                morton_primitives.radix_sort_builder().with_single_threaded_tuner().with_parallel(false).sort();
+            } else {
+                morton_primitives.radix_sort_unstable();
+            }
+            
         }
         println!("completed sort");
 
@@ -98,7 +103,7 @@ impl Bvh {
 
         // Create subtrees from treelets in parallel.
         let total_nodes = AtomicU32::new(0);
-        let treelets = treelets_to_build
+        let treelets = if !single_threaded {treelets_to_build
             .par_iter_mut()
             .map(|treelet| {
                 let mut nodes_created = 0;
@@ -116,7 +121,28 @@ impl Bvh {
                 total_nodes.fetch_add(nodes_created, Ordering::Relaxed);
                 node
             })
-            .collect();
+            .collect() } else {
+                // single threaded version
+                treelets_to_build
+                .iter_mut()
+                .map(|treelet| {
+                    let mut nodes_created = 0;
+                    let first_bit_index = 29 - 12;
+                    let node = emit_lbvh(
+                        &primitives,
+                        &morton_primitives,
+                        treelet.0,
+                        treelet.1,
+                        &mut nodes_created,
+                        treelet.2,
+                        first_bit_index,
+                        max_prims as usize,
+                    );
+                    total_nodes.fetch_add(nodes_created, Ordering::Relaxed);
+                    node
+                })
+                .collect()
+            };
 
         println!("Built treelets");
 
@@ -486,7 +512,7 @@ mod bvh_test {
     #[test]
     fn bvh_new() {
         let model = Mesh::from_obj("res/models/test_object.obj").expect("Failed to load model");
-        let bvh = Bvh::new(&model, 4);
+        let bvh = Bvh::new(&model, 4, false);
         let _flattened = bvh.flatten();
         //println!("{:#?}", bvh);
         //println!("{:#?}", flattened);
@@ -495,21 +521,21 @@ mod bvh_test {
     #[test]
     fn bvh_new2() {
         let model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
-        let bvh = Bvh::new(&model, 4);
+        let bvh = Bvh::new(&model, 4, false);
         let _flattened = bvh.flatten();
     }
 
     #[test]
     fn bvh_new3() {
         let model = Mesh::from_obj("res/models/teapot.obj").expect("Failed to load model");
-        let bvh = Bvh::new(&model, 4);
+        let bvh = Bvh::new(&model, 4, false);
         let _flattened = bvh.flatten();
     }
 
     #[test]
     fn bvh_new4() {
         let model = Mesh::from_obj("res/models/bunny.obj").expect("Failed to load model");
-        let bvh = Bvh::new(&model, 4);
+        let bvh = Bvh::new(&model, 4, false);
         let _flattened = bvh.flatten();
     }
 
@@ -517,7 +543,7 @@ mod bvh_test {
     fn bvh_new5() {
         let model = Mesh::from_obj("res/models/dragon.obj").expect("Failed to load model");
         let start = std::time::Instant::now();
-        let bvh = Bvh::new(&model, 4);
+        let bvh = Bvh::new(&model, 4, false);
         let _flattened = bvh.flatten();
         let passed = start.elapsed();
         println!("built BVH in {} ms", passed.as_micros() as f64 / 1000.0);
