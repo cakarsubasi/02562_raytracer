@@ -2,7 +2,6 @@ const MAX_LEVEL = 50u;
 const F32_MAX = 1e27;
 
 //var<storage> bvh_nodes: array<BvhNode>;
-//@group(0) @binding(2)
 //var<storage> bvh_triangles: array<u32>;
 
 struct BvhNode {
@@ -123,8 +122,6 @@ fn intersect_bb3(ray_dir_inv: vec3f, ray_orig: vec3f, bbox: BvhNode) -> bool {
 
     return true;
 }
-
-
 
 
 var<private> node_stack: array<u32, MAX_LEVEL>;

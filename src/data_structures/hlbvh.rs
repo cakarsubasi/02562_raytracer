@@ -2,7 +2,7 @@ use rayon::prelude::*;
 use rdst::{RadixKey, RadixSort};
 use std::{
     cmp::Ord,
-    sync::atomic::AtomicU32,
+    sync::atomic::{AtomicU32, Ordering},
 };
 
 use crate::mesh::Mesh;
@@ -38,8 +38,6 @@ impl Bvh {
         for bbox in &primitives {
             bound.include_vertex(bbox.bbox.center());
         }
-        // allocate and initialize the sorted primitive array
-        let mut ordered_primitives = vec![AccObj::new(0, Bbox::new()); primitives.len()];
 
         // generate morton codes for the primitives
         // use 30 bit morton codes as described in the PBR book
@@ -60,6 +58,8 @@ impl Bvh {
                 morton.morton_code = encode_morton_3(offset.0, offset.1, offset.2);
             });
 
+        println!("completed morton code generation");
+
         // Sort primitives using morton codes
         if cfg!(debug_assertions) {
             morton_primitives.sort_unstable();
@@ -69,8 +69,10 @@ impl Bvh {
             // code, I am just going to put this behind the release flag since it does work in that case
             morton_primitives.radix_sort_unstable();
         }
-        //println!("completed sort");
+        println!("completed sort");
 
+        // allocate and initialize the sorted primitive array
+        let mut ordered_primitives = vec![AccObj::new(0, Bbox::new()); primitives.len()];
         // Initialize treelets by pooling primitives that have the same most significant 12-bits
         // in their morton code
         let mut treelets_to_build = vec![];
@@ -92,7 +94,7 @@ impl Bvh {
             end += 1;
         }
 
-        //println!("Initialized treelets: {}", treelets_to_build.len());
+        println!("Initialized treelets: {}", treelets_to_build.len());
 
         // Create subtrees from treelets in parallel.
         let total_nodes = AtomicU32::new(0);
@@ -101,27 +103,28 @@ impl Bvh {
             .map(|treelet| {
                 let mut nodes_created = 0;
                 let first_bit_index = 29 - 12;
-                let node =
-                    emit_lbvh(
-                        &primitives,
-                        &morton_primitives,
-                        treelet.0,
-                        treelet.1,
-                        &mut nodes_created,
-                        treelet.2,
-                        first_bit_index,
-                        max_prims as usize,
-                    );
-                total_nodes.fetch_add(nodes_created, std::sync::atomic::Ordering::Relaxed);
+                let node = emit_lbvh(
+                    &primitives,
+                    &morton_primitives,
+                    treelet.0,
+                    treelet.1,
+                    &mut nodes_created,
+                    treelet.2,
+                    first_bit_index,
+                    max_prims as usize,
+                );
+                total_nodes.fetch_add(nodes_created, Ordering::Relaxed);
                 node
             })
             .collect();
-        //println!("Built treelets");
+
+        println!("Built treelets");
+
         // Use SAH or some other method to collapse nodes into a single BVH
-        let mut total_nodes = total_nodes.fetch_add(0, std::sync::atomic::Ordering::Relaxed);
+        let mut total_nodes = total_nodes.fetch_add(0, Ordering::Relaxed);
         let root = build_upper_tree(treelets, &mut total_nodes, &mut ordered_primitives);
 
-        //println!("Successfully built BVH");
+        println!("Successfully built BVH");
 
         Self {
             root,
@@ -186,38 +189,34 @@ fn build_upper_tree(
     total_nodes: &mut u32,
     _ordered_prims: &mut [AccObj],
 ) -> BvhBuildNode {
-    collapse_build_nodes_recursive(build_nodes, total_nodes) //, ordered_prims, &mut 0)
+    collapse_build_nodes_recursive(build_nodes, total_nodes)
 }
 
 /// Split in half implementation
 fn collapse_build_nodes_recursive(
     mut build_nodes: Vec<BvhBuildNode>,
-    total_nodes: &mut u32, /*, ordered_prims: &mut [AccObj], ordered_prims_offset: &mut u32 */
+    total_nodes: &mut u32,
 ) -> BvhBuildNode {
-    // compute overall bound
-    let mut bound = Bbox::new();
-    for node in build_nodes.iter() {
-        bound.include_bbox(&node.bbox);
-    }
-
     // create leaf
     if build_nodes.len() == 1 {
         build_nodes.pop().unwrap()
     } else {
+        *total_nodes += 1;
         // create split using center
         let mut centroid_bound = Bbox::new();
         for node in build_nodes.iter() {
             centroid_bound.include_vertex(node.bbox.center());
         }
+        // not correct right now
         let dimension = centroid_bound.longest_axis();
 
         let (child0_nodes, child1_nodes) = mid_partition(build_nodes, dimension);
 
-        let child0 = collapse_build_nodes_recursive(child0_nodes, total_nodes); //, ordered_prims, ordered_prims_offset);
-        let child1 = collapse_build_nodes_recursive(child1_nodes, total_nodes); //, ordered_prims, ordered_prims_offset);
-
-        *total_nodes += 1;
-        BvhBuildNode::new_internal(dimension.into(), child0, child1)
+        BvhBuildNode::new_internal(
+            dimension.into(),
+            collapse_build_nodes_recursive(child0_nodes, total_nodes),
+            collapse_build_nodes_recursive(child1_nodes, total_nodes),
+        )
     }
 }
 
@@ -287,8 +286,7 @@ impl BvhBuildNode {
     }
 }
 
-/// Safety:
-/// ordered_primitives should have the same length as morton_primitives
+/// Create an LBVH subtree
 fn emit_lbvh(
     primitives: &[AccObj],
     morton_primitives: &[MortonPrimitive],
@@ -299,19 +297,18 @@ fn emit_lbvh(
     bit_index: i32,
     max_prims_in_node: usize,
 ) -> BvhBuildNode {
+    *total_nodes += 1;
     // We cannot go further down or have few enough primitives to create a leaf
     if bit_index <= -1 || num_primitives < max_prims_in_node {
         let mut bbox = Bbox::new();
         let first_prim_offset = morton_offset;
         for i in 0..num_primitives {
             let primitive_index = morton_primitives[morton_offset + i].index;
-            ordered_primitives[i] =
-                    primitives[primitive_index as usize];
+            ordered_primitives[i] = primitives[primitive_index as usize];
 
             bbox.include_bbox(&primitives[primitive_index as usize].bbox);
         }
 
-        *total_nodes += 1;
         BvhBuildNode::new_leaf(first_prim_offset as u32, num_primitives as u32, bbox)
     } else {
         let mask = 1 << bit_index;
@@ -319,7 +316,7 @@ fn emit_lbvh(
             == (morton_primitives[morton_offset + num_primitives - 1].morton_code & mask)
         {
             // same call with bit index dropped by 1
-            return emit_lbvh(
+            emit_lbvh(
                 primitives,
                 morton_primitives,
                 morton_offset,
@@ -328,59 +325,61 @@ fn emit_lbvh(
                 ordered_primitives,
                 bit_index - 1,
                 max_prims_in_node,
-            );
-        }
-
-        // find LBVH split using binary search
-        let pred = |i: usize| {
-            (morton_primitives[morton_offset].morton_code & mask)
-                == (morton_primitives[morton_offset + i].morton_code & mask)
-        };
-
-        let mut size_maybe = num_primitives.checked_sub(2);
-        let mut first = 1;
-        while size_maybe.is_some_and(|size| size > 0) {
-            let size = size_maybe.unwrap();
-            let half = size >> 1;
-            let middle = first + half;
-            let result = pred(middle);
-            first = if result { middle + 1 } else { first };
-            size_maybe = if result {
-                size.checked_sub(half + 1)
-            } else {
-                Some(half)
+            )
+        } else {
+            // find LBVH split using binary search
+            let pred = |i: usize| {
+                (morton_primitives[morton_offset].morton_code & mask)
+                    == (morton_primitives[morton_offset + i].morton_code & mask)
             };
+
+            let mut size_maybe = num_primitives.checked_sub(2);
+            let mut first = 1;
+            while size_maybe.is_some_and(|size| size > 0) {
+                let size = size_maybe.unwrap();
+                let half = size >> 1;
+                let middle = first + half;
+                let result = pred(middle);
+                first = if result { middle + 1 } else { first };
+                size_maybe = if result {
+                    size.checked_sub(half + 1)
+                } else {
+                    Some(half)
+                };
+            }
+            let offset = usize::clamp(first, 0, num_primitives.checked_sub(2).unwrap_or(0));
+            let new_morton_offset = morton_offset + offset;
+
+            let (left_ordered_primitives, right_ordered_primitives) =
+                ordered_primitives.split_at_mut(offset);
+
+            let axis = (bit_index % 3) as u32;
+
+            // return interior LBVH node
+            BvhBuildNode::new_internal(
+                axis.into(),
+                emit_lbvh(
+                    primitives,
+                    morton_primitives,
+                    morton_offset,
+                    offset,
+                    total_nodes,
+                    left_ordered_primitives,
+                    bit_index - 1,
+                    max_prims_in_node,
+                ),
+                emit_lbvh(
+                    primitives,
+                    morton_primitives,
+                    new_morton_offset,
+                    num_primitives - offset,
+                    total_nodes,
+                    right_ordered_primitives,
+                    bit_index - 1,
+                    max_prims_in_node,
+                ),
+            )
         }
-        let offset = usize::clamp(first, 0, num_primitives.checked_sub(2).unwrap_or(0));
-        let new_morton_offset = morton_offset + offset;
-
-        let (left_ordered_primitives, right_ordered_primitives) = ordered_primitives.split_at_mut(offset);
-
-        // return interior LBVH node
-        let left = emit_lbvh(
-            primitives,
-            morton_primitives,
-            morton_offset,
-            offset,
-            total_nodes,
-            left_ordered_primitives,
-            bit_index - 1,
-            max_prims_in_node,
-        );
-        let right = emit_lbvh(
-            primitives,
-            morton_primitives,
-            new_morton_offset,
-            num_primitives - offset,
-            total_nodes,
-            right_ordered_primitives,
-            bit_index - 1,
-            max_prims_in_node,
-        );
-        let axis = (bit_index % 3) as u32;
-
-        *total_nodes += 1;
-        BvhBuildNode::new_internal(axis.into(), left, right)
     }
 }
 
