@@ -2,6 +2,7 @@
 name = "raytracer"
 version = "0.1.0"
 edition = "2021"
+default-run = "raytracer_wgpu"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -59,6 +60,10 @@ web-sys = { version = "0.3", features = [
 [[bin]]
 name = "raytracer_wgpu"
 path = "src/main.rs"
+
+[[bin]]
+name = "bvh"
+path = "src/bin/bvh_project.rs"
 
 [lib]
 name = "raytracer_wgpu_lib"

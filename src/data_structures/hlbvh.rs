@@ -1,8 +1,8 @@
 use rayon::prelude::*;
-use rdst::{RadixKey, RadixSort, RadixSortBuilder};
+use rdst::{RadixKey, RadixSort};
 use std::{
     cmp::Ord,
-    sync::atomic::{AtomicU32, Ordering},
+    sync::atomic::{AtomicU32, Ordering}, time::{Duration, Instant},
 };
 
 use crate::mesh::Mesh;
@@ -10,7 +10,7 @@ use crate::mesh::Mesh;
 use super::{
     accobj::{AccObj, Split},
     bbox::Bbox,
-    vector::Vec3f32,
+    vector::Vec3f32, bvh_util::BvhConstructionTime,
 };
 
 /// Bounding Volume Hierarchy type
@@ -25,6 +25,8 @@ pub struct Bvh {
     primitives: Vec<AccObj>,
     // total number of nodes in the BVH
     total_nodes: u32,
+    /// For benchmarking
+    pub time: BvhConstructionTime,
 }
 
 impl Bvh {
@@ -32,6 +34,8 @@ impl Bvh {
     /// https://www.pbr-book.org/4ed/Primitives_and_Intersection_Acceleration/Bounding_Volume_Hierarchies
     ///
     pub fn new(model: &Mesh, max_prims: u32, single_threaded: bool) -> Self {
+        let mut now = Instant::now();
+
         let primitives = model.bboxes();
         // calculate the overall boundary for morton code generation
         let mut bound = Bbox::new();
@@ -42,23 +46,30 @@ impl Bvh {
         // generate morton codes for the primitives
         // use 30 bit morton codes as described in the PBR book
         let morton_bits = 10;
-        let morton_scale = 1 << morton_bits;
+        let morton_scale = (1 << morton_bits) as f32;
 
         // The idea is that we convert each primitive to a single coordinate between (0, 0, 0) and (1, 1, 1)
         // relative to the overall boundary of the object. Using 32-bit floats, we only need 10-bits of fixed
         // precision to represent this range, but this will degrade quality on very large scenes
-        let mut morton_primitives = vec![MortonPrimitive::new(); primitives.len()];
-        morton_primitives
-            .iter_mut()
-            .enumerate()
-            .for_each(|(idx, morton)| {
-                morton.index = idx as u32;
-                let centroid_offset = bound.offset(primitives[idx].bbox.center());
-                let offset = centroid_offset * morton_scale as f32;
-                morton.morton_code = encode_morton_3(offset.0, offset.1, offset.2);
-            });
+        let mut morton_primitives: Vec<_> = if !single_threaded { (0..primitives.len()).into_par_iter().map(|idx| {
+            let offset = bound.offset(primitives[idx].bbox.center()) * morton_scale;
+            MortonPrimitive {
+                index: idx as u32,
+                morton_code: encode_morton_3(offset.0, offset.1, offset.2),
+            }
+        }).collect() } else {
+            (0..primitives.len()).into_iter().map(|idx| {
+                let offset = bound.offset(primitives[idx].bbox.center()) * morton_scale;
+                MortonPrimitive {
+                    index: idx as u32,
+                    morton_code: encode_morton_3(offset.0, offset.1, offset.2),
+                }
+            }).collect()
+        };
 
-        println!("completed morton code generation");
+        //println!("completed morton code generation");
+        let time_morton_code = now.elapsed();
+        now = Instant::now();
 
         // Sort primitives using morton codes
         if cfg!(debug_assertions) {
@@ -68,13 +79,19 @@ impl Bvh {
             // on Rust debug builds, since I can't do much about this without editing that crate's source
             // code, I am just going to put this behind the release flag since it does work in that case
             if single_threaded {
-                morton_primitives.radix_sort_builder().with_single_threaded_tuner().with_parallel(false).sort();
+                morton_primitives
+                    .radix_sort_builder()
+                    .with_single_threaded_tuner()
+                    .with_parallel(false)
+                    .sort();
             } else {
                 morton_primitives.radix_sort_unstable();
             }
-            
         }
-        println!("completed sort");
+
+        let time_radix_sort = now.elapsed();
+        now = Instant::now();
+        //println!("completed sort");
 
         // allocate and initialize the sorted primitive array
         let mut ordered_primitives = vec![AccObj::new(0, Bbox::new()); primitives.len()];
@@ -99,31 +116,35 @@ impl Bvh {
             end += 1;
         }
 
-        println!("Initialized treelets: {}", treelets_to_build.len());
+        let time_treelet_init = now.elapsed();
+        now = Instant::now();
+        //println!("Initialized treelets: {}", treelets_to_build.len());
 
         // Create subtrees from treelets in parallel.
         let total_nodes = AtomicU32::new(0);
-        let treelets = if !single_threaded {treelets_to_build
-            .par_iter_mut()
-            .map(|treelet| {
-                let mut nodes_created = 0;
-                let first_bit_index = 29 - 12;
-                let node = emit_lbvh(
-                    &primitives,
-                    &morton_primitives,
-                    treelet.0,
-                    treelet.1,
-                    &mut nodes_created,
-                    treelet.2,
-                    first_bit_index,
-                    max_prims as usize,
-                );
-                total_nodes.fetch_add(nodes_created, Ordering::Relaxed);
-                node
-            })
-            .collect() } else {
-                // single threaded version
-                treelets_to_build
+        let treelets = if !single_threaded {
+            treelets_to_build
+                .par_iter_mut()
+                .map(|treelet| {
+                    let mut nodes_created = 0;
+                    let first_bit_index = 29 - 12;
+                    let node = emit_lbvh(
+                        &primitives,
+                        &morton_primitives,
+                        treelet.0,
+                        treelet.1,
+                        &mut nodes_created,
+                        treelet.2,
+                        first_bit_index,
+                        max_prims as usize,
+                    );
+                    total_nodes.fetch_add(nodes_created, Ordering::Relaxed);
+                    node
+                })
+                .collect()
+        } else {
+            // single threaded version
+            treelets_to_build
                 .iter_mut()
                 .map(|treelet| {
                     let mut nodes_created = 0;
@@ -142,20 +163,31 @@ impl Bvh {
                     node
                 })
                 .collect()
-            };
+        };
 
-        println!("Built treelets");
+        let time_treelet_build = now.elapsed();
+        now = Instant::now();
+        //println!("Built treelets");
 
         // Use SAH or some other method to collapse nodes into a single BVH
         let mut total_nodes = total_nodes.fetch_add(0, Ordering::Relaxed);
         let root = build_upper_tree(treelets, &mut total_nodes, &mut ordered_primitives);
 
-        println!("Successfully built BVH");
+        let time_upper_tree = now.elapsed();
+        //println!("Successfully built BVH");
 
         Self {
             root,
             primitives: ordered_primitives,
             total_nodes,
+            time: BvhConstructionTime {
+                morton_codes: time_morton_code,
+                radix_sort: time_radix_sort,
+                treelet_init: time_treelet_init,
+                treelet_build: time_treelet_build,
+                upper_tree: time_upper_tree,
+                flattening: Duration::from_secs(0),
+            }
         }
     }
 
@@ -285,6 +317,7 @@ enum BvhBuildNodeType {
 }
 
 impl BvhBuildNode {
+    #[inline]
     /// Create a new leaf nodes
     fn new_leaf(first_prim_offset: u32, num_primitives: u32, bbox: Bbox) -> Self {
         Self {
@@ -296,6 +329,7 @@ impl BvhBuildNode {
         }
     }
 
+    #[inline]
     /// Create a new internal node
     fn new_internal(axis: Split, child0: BvhBuildNode, child1: BvhBuildNode) -> Self {
         let mut bbox = child0.bbox;
@@ -414,15 +448,6 @@ fn emit_lbvh(
 struct MortonPrimitive {
     pub index: u32,
     pub morton_code: u32, // use 30 bits
-}
-
-impl MortonPrimitive {
-    fn new() -> MortonPrimitive {
-        MortonPrimitive {
-            index: 0,
-            morton_code: 0,
-        }
-    }
 }
 
 /// Allow radix_sort
