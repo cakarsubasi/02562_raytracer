@@ -2,7 +2,7 @@ use rayon::prelude::*;
 use rdst::{RadixKey, RadixSort};
 use std::{
     cmp::Ord,
-    sync::atomic::{AtomicU32, AtomicUsize},
+    sync::atomic::AtomicU32,
 };
 
 use crate::mesh::Mesh;
@@ -77,15 +77,16 @@ impl Bvh {
         let mask = 0b0011_1111_1111_1100_0000_0000_0000_0000u32;
         let mut start = 0;
         let mut end = 1;
+        let mut slice = ordered_primitives.as_mut_slice();
         while end <= morton_primitives.len() {
             if end == morton_primitives.len()
                 || ((morton_primitives[start].morton_code & mask)
                     != (morton_primitives[end].morton_code & mask))
             {
                 let num_primitives = end - start;
-                //let treelet = LBvhTreeLet::new(start, num_primitives);
-                treelets_to_build.push((start, num_primitives));
-
+                let (current_slice, slice_next) = slice.split_at_mut(num_primitives);
+                slice = slice_next;
+                treelets_to_build.push((start, num_primitives, current_slice));
                 start = end;
             }
             end += 1;
@@ -94,34 +95,24 @@ impl Bvh {
         //println!("Initialized treelets: {}", treelets_to_build.len());
 
         // Create subtrees from treelets in parallel.
-        // As we are going to collapse the entire tree into a single array at the end, we need
-        // treelets to agree which parts of the array belong to them. This can be coordinated
-        // locklessly using a single atomic variable (as described in the PBR book)
-        //
-        // Normally, Rust does not allow multiple threads to have mutable
         let total_nodes = AtomicU32::new(0);
-        let ordered_prims_offset = AtomicUsize::new(0);
         let treelets = treelets_to_build
             .par_iter_mut()
             .map(|treelet| {
                 let mut nodes_created = 0;
                 let first_bit_index = 29 - 12;
-                // safety: ordered_primitives have the same length as morton_primitives
-                let node = unsafe {
+                let node =
                     emit_lbvh(
                         &primitives,
                         &morton_primitives,
                         treelet.0,
                         treelet.1,
                         &mut nodes_created,
-                        ordered_primitives.as_ptr(),
-                        &ordered_prims_offset,
+                        treelet.2,
                         first_bit_index,
                         max_prims as usize,
-                    )
-                };
+                    );
                 total_nodes.fetch_add(nodes_created, std::sync::atomic::Ordering::Relaxed);
-                //treelet.root = node;
                 node
             })
             .collect();
@@ -298,36 +289,25 @@ impl BvhBuildNode {
 
 /// Safety:
 /// ordered_primitives should have the same length as morton_primitives
-unsafe fn emit_lbvh(
+fn emit_lbvh(
     primitives: &[AccObj],
     morton_primitives: &[MortonPrimitive],
     morton_offset: usize,
     num_primitives: usize,
     total_nodes: &mut u32,
-    ordered_primitives: *const AccObj,
-    ordered_prims_offset: &AtomicUsize,
+    ordered_primitives: &mut [AccObj],
     bit_index: i32,
     max_prims_in_node: usize,
 ) -> BvhBuildNode {
     // We cannot go further down or have few enough primitives to create a leaf
     if bit_index <= -1 || num_primitives < max_prims_in_node {
         let mut bbox = Bbox::new();
-        // will need atomics here
-        let first_prim_offset =
-            ordered_prims_offset.fetch_add(num_primitives, std::sync::atomic::Ordering::Relaxed);
-
+        let first_prim_offset = morton_offset;
         for i in 0..num_primitives {
             let primitive_index = morton_primitives[morton_offset + i].index;
-            // Safety: since ordered_prims_offset is atomic, the first_prim_offset value we receive is unique to this thread
-            // and the next thread to peek into the value will receive first_prim_offset + num_primitives
-            // this means that [first_prim_offset..first_prim_offset+num_primitives] range is unaliased and is only written
-            // by this thread
-            // the caller is responsible for ensuring that we do not overrun this pointer but ordered_primitives should have the
-            // length as morton_primitives, which means we won't overrun the buffer
-            unsafe {
-                *ordered_primitives.cast_mut().add(first_prim_offset + i) =
+            ordered_primitives[i] =
                     primitives[primitive_index as usize];
-            }
+
             bbox.include_bbox(&primitives[primitive_index as usize].bbox);
         }
 
@@ -346,7 +326,6 @@ unsafe fn emit_lbvh(
                 num_primitives,
                 total_nodes,
                 ordered_primitives,
-                ordered_prims_offset,
                 bit_index - 1,
                 max_prims_in_node,
             );
@@ -375,6 +354,8 @@ unsafe fn emit_lbvh(
         let offset = usize::clamp(first, 0, num_primitives.checked_sub(2).unwrap_or(0));
         let new_morton_offset = morton_offset + offset;
 
+        let (left_ordered_primitives, right_ordered_primitives) = ordered_primitives.split_at_mut(offset);
+
         // return interior LBVH node
         let left = emit_lbvh(
             primitives,
@@ -382,8 +363,7 @@ unsafe fn emit_lbvh(
             morton_offset,
             offset,
             total_nodes,
-            ordered_primitives,
-            ordered_prims_offset,
+            left_ordered_primitives,
             bit_index - 1,
             max_prims_in_node,
         );
@@ -393,8 +373,7 @@ unsafe fn emit_lbvh(
             new_morton_offset,
             num_primitives - offset,
             total_nodes,
-            ordered_primitives,
-            ordered_prims_offset,
+            right_ordered_primitives,
             bit_index - 1,
             max_prims_in_node,
         );
