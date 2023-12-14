@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, io::BufRead};
 
 use crate::{
     bindings::storage_mesh::StorageMeshGpu,
@@ -59,6 +59,22 @@ impl std::fmt::Display for Mesh {
 
 impl Mesh {
 
+    pub fn from_buffer<B>(buffer: &mut B) -> anyhow::Result<Mesh>
+    where B: BufRead {
+        let (models, materials_maybe) = tobj::load_obj_buf(
+            buffer,
+            &tobj::LoadOptions {
+                single_index: true,
+                triangulate: true,
+                ..Default::default()
+            },
+            |_p| { Err(tobj::LoadError::ReadError) }
+        )?;
+
+        Self::load(models, materials_maybe)
+
+    }
+
     pub fn from_obj<P>(file_name: P) -> anyhow::Result<Mesh>
     where
         P: AsRef<Path> + std::fmt::Debug,
@@ -72,6 +88,10 @@ impl Mesh {
             },
         )?;
 
+        Self::load(models, materials_maybe)
+    }
+
+    pub fn load(models: Vec<tobj::Model>, materials_maybe: Result<Vec<tobj::Material>, tobj::LoadError>) -> anyhow::Result<Mesh> {
         let mut materials = 
         if let Ok(materials_obj) = materials_maybe {
             materials_obj.iter().map( |m| {

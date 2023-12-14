@@ -18,14 +18,12 @@ use super::{
 pub struct Bvh {
     /// root node of the BVH
     root: BvhBuildNode,
-    /// maximum number of primitives (triangles) in a leaf node
-    pub max_prims: u32,
     /// sorted array of primitives, we need to have primitives in the leaf
     /// nodes next to one another so we only have to store the pointer offset
     /// and number of elements, so we need a second storage buffer on the GPU
     /// that contains the actual indices we want to access
     primitives: Vec<AccObj>,
-    /// total number of nodes in the BVH
+    // total number of nodes in the BVH
     total_nodes: u32,
 }
 
@@ -132,7 +130,6 @@ impl Bvh {
 
         Self {
             root,
-            max_prims,
             primitives: ordered_primitives,
             total_nodes,
         }
@@ -151,11 +148,11 @@ impl Bvh {
             let mut linear_node = nodes[*offset as usize];
             linear_node.max = cluster.bbox.max;
             linear_node.min = cluster.bbox.min;
-            *offset += 1;
             let node_offset = *offset;
+            *offset += 1;
             match &cluster.node_type {
-                BvhBuildNodeType::Leaf { first_prim_offset } => {
-                    linear_node.number_of_prims = cluster.num_primitives;
+                BvhBuildNodeType::Leaf { num_primitives, first_prim_offset } => {
+                    linear_node.number_of_prims = *num_primitives;
                     linear_node.offset_ptr = *first_prim_offset;
                 }
                 // We do not use the split right now
@@ -170,6 +167,7 @@ impl Bvh {
                     linear_node.offset_ptr = flatten_recursive(nodes, right, offset);
                 }
             }
+
             nodes[current_offset as usize] = linear_node;
             node_offset
         }
@@ -244,19 +242,23 @@ fn mid_partition(
     (nodes, nodes_right)
 }
 
-/// Node
-#[derive(Clone, Debug)]
+/// Node type
+#[derive(Debug, Clone)]
 pub struct BvhBuildNode {
     pub bbox: Bbox,
     node_type: BvhBuildNodeType,
-    num_primitives: u32,
 }
 
+/// BVH Nodes are either a leaf or internal
 #[derive(Debug, Clone)]
 enum BvhBuildNodeType {
+    /// We are managing that primitives belonging to a
+    /// leaf node are adjacent externally 
     Leaf {
+        num_primitives: u32,
         first_prim_offset: u32,
     },
+    /// Interior nodes have ownership over child nodes
     Interior {
         _split: Split,
         left: Box<BvhBuildNode>,
@@ -269,8 +271,7 @@ impl BvhBuildNode {
     fn new_leaf(first_prim_offset: u32, num_primitives: u32, bbox: Bbox) -> Self {
         Self {
             bbox,
-            num_primitives,
-            node_type: BvhBuildNodeType::Leaf { first_prim_offset },
+            node_type: BvhBuildNodeType::Leaf { first_prim_offset, num_primitives },
         }
     }
 
@@ -280,7 +281,7 @@ impl BvhBuildNode {
         bbox.include_bbox(&child1.bbox);
         Self {
             bbox,
-            num_primitives: child0.num_primitives + child1.num_primitives,
+            //num_primitives: child0.num_primitives + child1.num_primitives,
             node_type: BvhBuildNodeType::Interior {
                 _split: axis,
                 left: Box::new(child0),
@@ -320,12 +321,12 @@ impl LBvhTreeLet {
         bit_index: i32,
         max_prims_in_node: usize,
     ) -> BvhBuildNode {
+        // We cannot go further down or have few enough primitives to create a leaf
         if bit_index <= -1 || num_primitives < max_prims_in_node {
             let mut bbox = Bbox::new();
             // will need atomics here
             let first_prim_offset = ordered_prims_offset
                 .fetch_add(num_primitives, std::sync::atomic::Ordering::Relaxed);
-            //*ordered_prims_offset += num_primitives;
 
             for i in 0..num_primitives {
                 let primitive_index = morton_primitives[morton_offset + i].index;
@@ -466,6 +467,11 @@ impl PartialOrd for MortonPrimitive {
     }
 }
 
+
+/// From the PBR Book vol. 4
+/// https://www.pbr-book.org/4ed/Utilities/Mathematical_Infrastructure#x7-MortonIndexing
+/// Take a 10-bit number and tile it as follows:
+/// xyzw -> --x--y--z--w
 #[inline]
 fn left_shift_3(mut x: u32) -> u32 {
     if x == 1 << 10 {
@@ -549,7 +555,7 @@ mod bvh_test {
         let start = std::time::Instant::now();
         let bvh = Bvh::new(&model, 4);
         let _flattened = bvh.flatten();
-        let passed = std::time::Instant::now() - start;
+        let passed = start.elapsed();
         println!("built BVH in {} ms", passed.as_micros() as f64 / 1000.0);
     }
 }

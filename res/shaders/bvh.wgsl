@@ -162,6 +162,8 @@ fn intersect_bvh(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
     var current_node_index = 0u;
     var found = false;
     stack_push_node(0u);
+    // this prevents the GPU driver from crashing, but the performance
+    // drop will still indicate something is wrong
     for (var depth = 0u; depth < 1000u; depth++) {
         if (stack_is_empty()) {
             break;
@@ -169,9 +171,9 @@ fn intersect_bvh(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
         current_node_index = stack_pop_node();
         let current_node = bvh_nodes[current_node_index];
         if (intersect_bb2(ray_dir_inv, ray_orig, current_node)) {
+            let offset = current_node.offset_ptr;
             // leaf node
             if (current_node.n_primitives > 0u) {
-                let offset = current_node.offset_ptr;
                 for (var i = 0u; i < current_node.n_primitives; i++) {
                     // get triangle
                     let obj_idx = bvh_triangles[offset+i];
@@ -180,20 +182,14 @@ fn intersect_bvh(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
                         (*r).tmax = (*hit).dist;
                         found = true;
                     }
-                }
-                
+                }             
             // internal node
             } else {
-                // TODO: Can store distance information to skip one of these nodes
                 stack_push_node(current_node_index + 1u);                
-                // TODO: I HAVE TO SUBSTRACT 1 HERE BECAUSE I DID NOT
-                // SET THE OFFSET_PTR CORRECTLY IN THE REFERENCE IMPL
-                // GOTTA BE CAREFUL OF THAT
-                stack_push_node(current_node.offset_ptr - 1u);
+                stack_push_node(offset);
             }
         }
     }
-
     return found;
 }
 
