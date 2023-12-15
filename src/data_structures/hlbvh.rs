@@ -198,21 +198,16 @@ impl Bvh {
         fn flatten_recursive(
             nodes: &mut Vec<GpuNode>,
             cluster: &BvhBuildNode,
-            offset: &mut u32,
-        ) -> u32 {
+            offset: &mut usize,
+        ) -> usize {
             let current_offset = *offset;
-            let mut linear_node = nodes[*offset as usize];
-            linear_node.max = cluster.bbox.max;
-            linear_node.min = cluster.bbox.min;
-            let node_offset = *offset;
             *offset += 1;
-            match &cluster.node_type {
+            let (num_primitives, offset_ptr) = match &cluster.node_type {
                 BvhBuildNodeType::Leaf {
                     num_primitives,
                     first_prim_offset,
                 } => {
-                    linear_node.number_of_prims = *num_primitives;
-                    linear_node.offset_ptr = *first_prim_offset;
+                    (*num_primitives, *first_prim_offset)
                 }
                 // We do not use the split right now
                 BvhBuildNodeType::Interior {
@@ -220,15 +215,18 @@ impl Bvh {
                     left,
                     right,
                 } => {
-                    let number_of_prims = 0;
-                    linear_node.number_of_prims = number_of_prims;
                     flatten_recursive(nodes, left, offset);
-                    linear_node.offset_ptr = flatten_recursive(nodes, right, offset);
+                    let offset_ptr = flatten_recursive(nodes, right, offset);
+                    (0, offset_ptr as u32)
                 }
-            }
-
-            nodes[current_offset as usize] = linear_node;
-            node_offset
+            };
+            nodes[current_offset] = GpuNode {
+                max: cluster.bbox.max,
+                min: cluster.bbox.min,
+                number_of_prims: num_primitives,
+                offset_ptr,
+            };
+            current_offset
         }
         flatten_recursive(&mut nodes, &self.root, &mut 0);
 

@@ -1,4 +1,4 @@
-## Bounding Volume Hierarchy
+# Bounding Volume Hierarchy
 
 Introduction, Method, Implementation, Results, Discussion
 
@@ -300,8 +300,64 @@ First we check if we can even perform a cut on the current bit_index.
 
 Otherwise we find a split using binary search.
 
-# TODO
+```rs
+            // find LBVH split using binary search
+            let pred = |i: usize| {
+                (morton_primitives[morton_offset].morton_code & mask)
+                    == (morton_primitives[morton_offset + i].morton_code & mask)
+            };
 
+            let mut size_maybe = num_primitives.checked_sub(2);
+            let mut first = 1;
+            while size_maybe.is_some_and(|size| size > 0) {
+                let size = size_maybe.unwrap();
+                let half = size >> 1;
+                let middle = first + half;
+                let result = pred(middle);
+                first = if result { middle + 1 } else { first };
+                size_maybe = if result {
+                    size.checked_sub(half + 1)
+                } else {
+                    Some(half)
+                };
+            }
+            let offset = usize::clamp(first, 0, num_primitives.checked_sub(2).unwrap_or(0));
+            let new_morton_offset = morton_offset + offset;
+```
+
+Once we determine a split, we perform the recursion and keep doing this until we reach the leaf nodes.
+
+```rs
+            let (left_ordered_primitives, right_ordered_primitives) =
+                ordered_primitives.split_at_mut(offset);
+
+            let axis = (bit_index % 3) as u32;
+
+            // return interior LBVH node
+            BvhBuildNode::new_internal(
+                axis.into(),
+                emit_lbvh(
+                    primitives,
+                    morton_primitives,
+                    morton_offset,
+                    offset,
+                    total_nodes,
+                    left_ordered_primitives,
+                    bit_index - 1,
+                    max_prims_in_node,
+                ),
+                emit_lbvh(
+                    primitives,
+                    morton_primitives,
+                    new_morton_offset,
+                    num_primitives - offset,
+                    total_nodes,
+                    right_ordered_primitives,
+                    bit_index - 1,
+                    max_prims_in_node,
+                ),
+            )
+```
 
 After all the treelets are generated, they have to be combined into a single tree. The method that the PBR book favors is the SAH or surface area heuristic, which I did not implement (although it would likely be the next step).
 
@@ -427,21 +483,16 @@ Finally we use the total_nodes which we saved for the first and only time to avo
         fn flatten_recursive(
             nodes: &mut Vec<GpuNode>,
             cluster: &BvhBuildNode,
-            offset: &mut u32,
-        ) -> u32 {
+            offset: &mut usize,
+        ) -> usize {
             let current_offset = *offset;
-            let mut linear_node = nodes[*offset as usize];
-            linear_node.max = cluster.bbox.max;
-            linear_node.min = cluster.bbox.min;
-            let node_offset = *offset;
             *offset += 1;
-            match &cluster.node_type {
+            let (num_primitives, offset_ptr) = match &cluster.node_type {
                 BvhBuildNodeType::Leaf {
                     num_primitives,
                     first_prim_offset,
                 } => {
-                    linear_node.number_of_prims = *num_primitives;
-                    linear_node.offset_ptr = *first_prim_offset;
+                    (*num_primitives, *first_prim_offset)
                 }
                 // We do not use the split right now
                 BvhBuildNodeType::Interior {
@@ -449,12 +500,19 @@ Finally we use the total_nodes which we saved for the first and only time to avo
                     left,
                     right,
                 } => {
-                    let number_of_prims = 0;
-                    linear_node.number_of_prims = number_of_prims;
                     flatten_recursive(nodes, left, offset);
-                    linear_node.offset_ptr = flatten_recursive(nodes, right, offset);
+                    let offset_ptr = flatten_recursive(nodes, right, offset);
+                    (0, offset_ptr as u32)
                 }
-            }
+            };
+            nodes[current_offset] = GpuNode {
+                max: cluster.bbox.max,
+                min: cluster.bbox.min,
+                number_of_prims: num_primitives,
+                offset_ptr,
+            };
+            current_offset
+        }
 
             nodes[current_offset as usize] = linear_node;
             node_offset
@@ -670,14 +728,58 @@ fn intersect_bb3(ray_dir_inv: vec3f, ray_orig: vec3f, bbox: BvhNode) -> bool {
 
 If I were to speculate, with the GPU utilization generally being low, there is high register pressure and there is a lot more loads and stores used for the second one, which is why all of the individual branches end up being faster than the select functions.
 
-### Results
+## 4. Results
 
-I will discuss results in two contexts. First is the tree build time and the second is tree traversal time. I will compare them to the BSP Tree implementation that I wrote during the lectures which is nowhere near optimal but neither is the BVH (which hopefully is clear so far in this report). 
+### 4.1 Correctness
 
-#### Performance
+Unfortunately, I cannot guarantee that my implementation is free of bugs, issues in these types of structures tend to result in very visible problems. For example:
 
-#### Comparison to BSP Tree
+![](./img/project_incorrect.png)
 
-### Discussion
+So I can say with confidence that the implementation is "reasonably correct" given I get the same visible output as the BSP.
+
+Teapot, BVH on top, BSP on the bottom.
+
+![](./img/project_teapot.png)
+![](./img/project_teapot_bsp.png)
+
+Bunny, BVH on top, BSP on the bottom.
+
+![](./img/project_bunny.png)
+![](./img/project_bunny_bsp.png)
+
+Dragon, BVH on top, BSP on the bottom.
+
+![](./img/project_dragon.png)
+![](./img/project_dragon_bsp.png)
+
+### 4.2 Performance
+
+I will discuss the performance in two contexts. First is the tree build time and the second is tree traversal time. I will compare them to the BSP Tree implementation that I wrote during the lectures which is nowhere near optimal but neither is the BVH (which hopefully is clear so far in this report). For performance, I wrote a mini benchmark suite where I ran every test 100 times while also varying different parameters. 
+
+#### 4.2.1 Building Performance
+
+Triangles versus performance:
+
+```
+teapot:   6,320 (1.0x) 
+bunny:   69,451 (10.99x)
+dragon: 871,414 (137.88x)
+```
+
+Multithreaded scaling:
+
+Leaf primitives versus performance:
+
+
+
+#### 4.2.2 Rendering Performance
+
+Now for the rendering performance. It is important to note that under every single case I show here, we were CPU bound, in other words there was always some time where the GPU was sitting idle. In addition, the GPU occupancy (parts of the GPU that were used during the shader) was low for every case. This means that this is not a reliable comparison of the rendering performance of the methods. In addition, with such stark differences in rendering performance with some changes to the bounding box intersection for the BVH, there are might be other optimization opportunities that significantly improve rendering performance for both the BSP and the BVH.
+
+## Discussion
 
 Considering how much of the work already existed, this was still a lot of work. The amount of debugging however was surprisingly little, there was no long period of being stuck like when implementing the BSP Tree, when I finished it end to end, it worked with surprisingly little debugging (maybe Rust is really saving me here but I can't say). The performance I achieved for BVH construction is not quite good enough for real time use, however it is close.
+
+The next step would be to implement a higher quality but slower upper tree construction algorithm. The Radix sort and even number of elements split was enough to outperform the BSP Tree provided within this course, so it is likely that there is more performance that is left on the table here in terms of rendering. Ultimately, the HLBVH is not the 
+
