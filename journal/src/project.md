@@ -781,5 +781,8 @@ Now for the rendering performance. It is important to note that under every sing
 
 Considering how much of the work already existed, this was still a lot of work. The amount of debugging however was surprisingly little, there was no long period of being stuck like when implementing the BSP Tree, when I finished it end to end, it worked with surprisingly little debugging (maybe Rust is really saving me here but I can't say). The performance I achieved for BVH construction is not quite good enough for real time use, however it is close.
 
-The next step would be to implement a higher quality but slower upper tree construction algorithm. The Radix sort and even number of elements split was enough to outperform the BSP Tree provided within this course, so it is likely that there is more performance that is left on the table here in terms of rendering. Ultimately, the HLBVH is not the 
+The next step would be to implement a higher quality but slower upper tree construction algorithm. The Radix sort and even number of elements split was enough to outperform the BSP Tree provided within this course, so it is likely that there is more performance that is left on the table here in terms of rendering. Ultimately, the HLBVH does not generate the highest quality trees
 
+@@PBR:6
+
+@@NVIDIA:7
