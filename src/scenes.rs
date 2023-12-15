@@ -435,6 +435,16 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             ..Default::default()
         },
         SceneDescriptor {
+            name: String::from("Project: Utah Teapot BSP"),
+            shader: PathBuf::from("res/shaders/project.wgsl"),
+            model: Some(teapot_path.clone()),
+            camera: utah_teapot_camera.clone(),
+            res: (800, 450),
+            vertex_type: VertexType::Combined,
+            traverse_type: TraverseType::Bsp,
+            ..Default::default()
+        },
+        SceneDescriptor {
             name: String::from("Project: Bunny"),
             shader: PathBuf::from("res/shaders/project.wgsl"),
             model: Some(bunny_path.clone()),
@@ -445,6 +455,16 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             ..Default::default()
         },
         SceneDescriptor {
+            name: String::from("Project: Bunny BSP"),
+            shader: PathBuf::from("res/shaders/project.wgsl"),
+            model: Some(bunny_path.clone()),
+            camera: bunny_camera.clone(),
+            res: (512, 512),
+            vertex_type: VertexType::Combined,
+            traverse_type: TraverseType::Bsp,
+            ..Default::default()
+        },
+        SceneDescriptor {
             name: String::from("Project: Dragon"),
             shader: PathBuf::from("res/shaders/project.wgsl"),
             model: Some(dragon_path.clone()),
@@ -452,6 +472,16 @@ pub fn get_scenes() -> Arc<[SceneDescriptor]> {
             res: (800, 450),
             vertex_type: VertexType::Combined,
             traverse_type: TraverseType::Bvh,
+            ..Default::default()
+        },
+        SceneDescriptor {
+            name: String::from("Project: Dragon BSP"),
+            shader: PathBuf::from("res/shaders/project.wgsl"),
+            model: Some(dragon_path.clone()),
+            camera: dragon_camera.clone(),
+            res: (800, 450),
+            vertex_type: VertexType::Combined,
+            traverse_type: TraverseType::Bsp,
             ..Default::default()
         },
     ])

@@ -193,3 +193,8 @@ fn intersect_bvh(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
 fn intersect_trimesh(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> bool {
     return intersect_bvh(r, hit);
 }
+
+fn intersect_min_max(r: ptr<function, Ray>) -> bool
+{
+    return true;
+}

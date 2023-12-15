@@ -1,6 +1,6 @@
 use crate::{mesh::Mesh, data_structures::hlbvh::GpuNode};
 
-use super::{bbox::Bbox, vector::Vec3f32};
+use super::bbox::Bbox;
 
 #[derive(Debug)]
 pub struct Bvh {
@@ -100,7 +100,7 @@ impl Bvh {
             total_nodes += 1;
             objects.push(combined);
         }
-        let mut bvh = Bvh {
+        let bvh = Bvh {
             root: objects.pop().unwrap(),
             max_prims: 1,
             primitives,
@@ -182,6 +182,6 @@ mod bvh_test {
     #[test]
     fn bvh_new2() {
         let model = Mesh::from_obj("res/models/CornellBox.obj").expect("Failed to load model");
-        let bvh = Bvh::new(&model, 1);
+        let _bvh = Bvh::new(&model, 1);
     }
 }

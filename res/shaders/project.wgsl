@@ -161,6 +161,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // each loop is one bounce
     for (var sample = 0u; sample < subdiv * subdiv; sample++) {
         var r = get_camera_ray(uv, sample);
+        if (!intersect_min_max(&r)) {
+            result = bgcolor.rgb;
+            break;
+        } 
         var hit = hit_record_init();
         for (var i = 0; i < max_depth; i++) {
             if (intersect_scene_bsp(&r, &hit)) {
@@ -288,7 +292,7 @@ fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitRecord>) -> vec3f {
         break;
     }
     let blocked = false;
-    let ambient = material.ambient.rgb;
+    let ambient = material.ambient.rgb * 0.1;
 
     return diffuse + ambient;
 }
