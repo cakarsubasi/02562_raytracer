@@ -51,10 +51,10 @@ impl Bvh {
         // The idea is that we convert each primitive to a single coordinate between (0, 0, 0) and (1, 1, 1)
         // relative to the overall boundary of the object. Using 32-bit floats, we only need 10-bits of fixed
         // precision to represent this range, but this will degrade quality on very large scenes
-        let mut morton_primitives: Vec<_> = if !single_threaded { (0..primitives.len()).into_par_iter().map(|idx| {
-            let offset = bound.offset(primitives[idx].bbox.center()) * morton_scale;
+        let mut morton_primitives: Vec<_> = if !single_threaded { (0..(primitives.len() as u32)).into_par_iter().map(|idx| {
+            let offset = bound.offset(primitives[idx as usize].bbox.center()) * morton_scale;
             MortonPrimitive {
-                index: idx as u32,
+                index: idx,
                 morton_code: encode_morton_3(offset.0, offset.1, offset.2),
             }
         }).collect() } else {

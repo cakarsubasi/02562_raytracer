@@ -34,7 +34,7 @@ fn run_benchmark(runs: u32) {
     println!("\nPerformance scaling with maximum leaf primitives (2/4):");
     run_bvh(&model_dragon, 1, false, runs).display("BVH: Dragon, 1, MT");
     run_bvh(&model_dragon, 2, false, runs).display("BVH: Dragon, 2, MT");
-    bvh_dragon_4_mt.display("Dragon, 4, MT");
+    bvh_dragon_4_mt.display("BVH: Dragon, 4, MT");
     run_bvh(&model_dragon, 6, false, runs).display("BVH: Dragon, 6, MT");
     let bvh_dragon_8_mt =
     run_bvh(&model_dragon, 8, false, runs).display("BVH: Dragon, 8, MT");
@@ -43,10 +43,10 @@ fn run_benchmark(runs: u32) {
 
     // Multithreaded performance scaling:
     println!("\nMultithreaded performance scaling (3/4):");
-    bvh_dragon_4_mt.display("Dragon, 4, MT");
+    bvh_dragon_4_mt.display("BVH: Dragon, 4, MT");
     let bvh_dragon_4_st = 
     run_bvh(&model_dragon, 4, true, runs).display("BVH: Dragon, 4, ST");
-    bvh_dragon_8_mt.display("Dragon, 8, MT");
+    bvh_dragon_8_mt.display("BVH: Dragon, 8, MT");
     let bvh_dragon_8_st = 
     run_bvh(&model_dragon, 8, true, runs).display("BVH: Dragon, 8, ST");
     println!("----------------------------------");
@@ -60,12 +60,12 @@ fn run_benchmark(runs: u32) {
     bvh_bunny_4_mt.display("BVH: Bunny, 4, MT");
     run_single_bsp(&model_bunny , 20, 4, runs).display("BSP: Bunny , 4, dep: 20");
     println!("\nDragon, 4 leaf primitives:");
-    bvh_dragon_4_st.display("Dragon, 4, ST");
-    bvh_dragon_4_mt.display("Dragon, 4, MT");
+    bvh_dragon_4_st.display("BVH: Dragon, 4, ST");
+    bvh_dragon_4_mt.display("BVH: Dragon, 4, MT");
     run_single_bsp(&model_dragon, 20, 4, runs).display("BSP: Dragon, 4, dep: 20");
     println!("\nDragon, 8 leaf primitives:");
-    bvh_dragon_8_st.display("Dragon, 8, ST");
-    bvh_dragon_8_mt.display("Dragon, 8, MT");
+    bvh_dragon_8_st.display("BVH: Dragon, 8, ST");
+    bvh_dragon_8_mt.display("BVH: Dragon, 8, MT");
     run_single_bsp(&model_dragon, 20, 8, runs).display("BSP: Dragon, 8, dep: 20");
     println!("----------------------------------");
 
@@ -74,7 +74,7 @@ fn run_benchmark(runs: u32) {
 
 fn run_bvh(model: &Mesh, max_prims: u32, single_threaded: bool, runs: u32) -> BvhConstructionTime {
     let mut total = BvhConstructionTime::default();
-    for i in 0..runs {
+    for _ in 0..runs {
         let bvh = Bvh::new(&model, max_prims, single_threaded);
         let timer = Instant::now();
         let _ = bvh.flatten();
@@ -82,7 +82,6 @@ fn run_bvh(model: &Mesh, max_prims: u32, single_threaded: bool, runs: u32) -> Bv
         let flattening_time = timer.elapsed();
         let mut current = bvh.time;
         current.flattening = flattening_time;
-        current.display_short(&format!("test {i}"));
         total += current;
     }
     total /= runs;
