@@ -744,11 +744,26 @@ Dragon, BVH on top, BSP on the bottom.
 
 ### 4.2 Performance
 
-I will discuss the performance in two contexts. First is the tree build time and the second is tree traversal time. I will compare them to the BSP Tree implementation that I wrote during the lectures which is nowhere near optimal but neither is the BVH (which hopefully is clear so far in this report). For performance, I wrote a mini benchmark suite, this can be found in `src/bin/bvh_project.rs` and a helper type can be found in `src/data_structures/bvh_util.rs`. For every test, I constructed the BVH or BSP tree 100 times with the provided parameters and took the arithmetic mean of all runs. I did not calculate the variance although this is a deterministic algorithm and the difference between runs was relatively low. Results that used the same parameters were reused between comparisons, for example the 100 runs of the dragon's multithreaded BVH construction with 4 maximum leaf primitives is the same one in every comparison. Cargo was invoked at release mode with the default compiler optimization flags, it is possible that "z" or "s" flag might provide better performance than the results below, debug builds ran about 10 times slower but the results are not included as they are not relevant.
+I will discuss the performance in two contexts. First is the tree build time and the second is tree traversal time. I will compare them to the BSP Tree implementation that I wrote during the lectures which is nowhere near optimal but neither is the BVH (which hopefully is clear so far in this report). For performance, I wrote a mini benchmark suite, this can be found in `src/bin/bvh_project.rs` and a helper type can be found in `src/data_structures/bvh_util.rs`. For every test, I constructed the BVH or BSP tree 100 times with the provided parameters and took the arithmetic mean of all runs. I did not calculate the variance although this is a deterministic algorithm and the difference between runs was relatively low, except for the very first run which generally underperformed other runs by 10-20%, this is likely not caused by the cache but the turbo behavior of my laptop. Results that used the same parameters were reused between comparisons, for example the 100 runs of the dragon's multithreaded BVH construction with 4 maximum leaf primitives is the same one in every comparison. Cargo was invoked at release mode with the default compiler optimization flags, it is possible that "z" or "s" flag might provide better performance than the results below, debug builds ran about 10 times slower but the results are not included as they are not relevant.
 
 #### 4.2.1 Building Performance
 
-Triangles versus performance:
+Before we do various comparisons, I would like to discuss the runtime of various different stages when constructing the BVH of a large mesh such as the Stanford Dragon. This is the "baseline" which I used for most of the comparisons in the rest of the section.
+
+```
+BVH Construction: Dragon (871,414 triangles), 4 triangles per leaf node, multithreaded
+MT  morton_codes:  9.81747ms
+MT  radix_sort:    3.170978ms
+    treelet_init:  4.180133ms
+MT  treelet_build: 7.880445ms
+    upper_tree:    419.181µs
+    flattening:    23.81249ms
+    total:         49.280697ms
+```
+
+Only three of the six steps were parallelized for the project.
+
+##### 4.2.1.1 Effect of Triangles
 
 ```
 teapot:   6,320 (1.0x) 
@@ -756,11 +771,226 @@ bunny:   69,451 (10.99x)
 dragon: 871,414 (137.88x)
 ```
 
-Multithreaded scaling:
+```
+BVH: Teapot (6,320), 4, MT
+  morton_codes:  174.9µs
+  radix_sort:    99.994µs
+  treelet_init:  68.982µs
+  treelet_build: 236.276µs
+  upper_tree:    263.86µs
+  flattening:    149.058µs
+  total:         993.07µs
+BVH: Bunny (69,451), 4, MT
+  morton_codes:  789.972µs
+  radix_sort:    885.317µs
+  treelet_init:  308.514µs
+  treelet_build: 686.7µs
+  upper_tree:    313.393µs
+  flattening:    1.321042ms
+  total:         4.304938ms
+BVH: Dragon (871,414), 4, MT
+  morton_codes:  9.81747ms
+  radix_sort:    3.170978ms
+  treelet_init:  4.180133ms
+  treelet_build: 7.880445ms
+  upper_tree:    419.181µs
+  flattening:    23.81249ms
+  total:         49.280697ms
+```
 
-Leaf primitives versus performance:
+```
+BVH: Teapot (6,320), 4, MT
+  total:         993.07µs
+BVH: Bunny (69,451), 4, MT
+  total:         4.304938ms
+BVH: Dragon (871,414), 4, MT
+  total:         49.280697ms
+```
+
+##### 4.2.1.2 Effect of Leaf Primitives
+
+```
+BVH: Dragon, 1, MT
+  morton_codes:  10.747579ms
+  radix_sort:    3.310354ms
+  treelet_init:  4.281506ms
+  treelet_build: 14.285238ms
+  upper_tree:    429.017µs
+  flattening:    68.385026ms
+  total:         101.43872ms
+BVH: Dragon, 2, MT
+  morton_codes:  9.675215ms
+  radix_sort:    2.988587ms
+  treelet_init:  4.199119ms
+  treelet_build: 13.021131ms
+  upper_tree:    422.889µs
+  flattening:    63.280614ms
+  total:         93.587555ms
+Dragon, 4, MT
+  morton_codes:  9.81747ms
+  radix_sort:    3.170978ms
+  treelet_init:  4.180133ms
+  treelet_build: 7.880445ms
+  upper_tree:    419.181µs
+  flattening:    23.81249ms
+  total:         49.280697ms
+BVH: Dragon, 6, MT
+  morton_codes:  9.180374ms
+  radix_sort:    2.889548ms
+  treelet_init:  4.149981ms
+  treelet_build: 5.422311ms
+  upper_tree:    388.576µs
+  flattening:    16.193306ms
+  total:         38.224096ms
+BVH: Dragon, 8, MT
+  morton_codes:  9.237541ms
+  radix_sort:    2.94198ms
+  treelet_init:  4.110331ms
+  treelet_build: 4.711496ms
+  upper_tree:    381.411µs
+  flattening:    12.35723ms
+  total:         33.739989ms
+BVH: Dragon, 16, MT
+  morton_codes:  9.42948ms
+  radix_sort:    3.05562ms
+  treelet_init:  4.172411ms
+  treelet_build: 3.5971ms
+  upper_tree:    381.127µs
+  flattening:    6.588801ms
+  total:         27.224539ms
+```
+
+```
+BVH: Dragon, 1, MT
+  total:         101.43872ms
+BVH: Dragon, 2, MT
+  total:         93.587555ms
+Dragon, 4, MT
+  total:         49.280697ms
+BVH: Dragon, 6, MT
+  total:         38.224096ms
+BVH: Dragon, 8, MT
+  total:         33.739989ms
+BVH: Dragon, 16, MT
+  total:         27.224539ms
+```
+
+##### 4.2.1.3 Multithreaded Scaling
+
+```
+Dragon, 4, MT
+  morton_codes:  9.81747ms
+  radix_sort:    3.170978ms
+  treelet_init:  4.180133ms
+  treelet_build: 7.880445ms
+  upper_tree:    419.181µs
+  flattening:    23.81249ms
+  total:         49.280697ms
+BVH: Dragon, 4, ST
+  morton_codes:  14.342445ms
+  radix_sort:    8.757931ms
+  treelet_init:  4.184123ms
+  treelet_build: 48.622467ms
+  upper_tree:    347.292µs
+  flattening:    22.982654ms
+  total:         99.236912ms
+```
+
+```
+Dragon, 8, MT
+  morton_codes:  9.237541ms
+  radix_sort:    2.94198ms
+  treelet_init:  4.110331ms
+  treelet_build: 4.711496ms
+  upper_tree:    381.411µs
+  flattening:    12.35723ms
+  total:         33.739989ms
+BVH: Dragon, 8, ST
+  morton_codes:  13.877526ms
+  radix_sort:    9.273799ms
+  treelet_init:  3.983207ms
+  treelet_build: 29.752219ms
+  upper_tree:    344.455µs
+  flattening:    10.965513ms
+  total:         68.196719ms
+```
 
 
+##### 4.2.1.4 Performance compared to the BSP
+
+```
+Teapot:
+BVH: Teapot, 4, MT
+  morton_codes:  174.9µs
+  radix_sort:    99.994µs
+  treelet_init:  68.982µs
+  treelet_build: 236.276µs
+  upper_tree:    263.86µs
+  flattening:    149.058µs
+  total:         993.07µs
+BSP: Teapot, 4, dep: 20
+  subdivision:   23.032083ms
+  flattening:    8.43311ms
+  total:         31.465193ms
+
+Bunny:
+BVH: Bunny , 4, MT
+  morton_codes:  789.972µs
+  radix_sort:    885.317µs
+  treelet_init:  308.514µs
+  treelet_build: 686.7µs
+  upper_tree:    313.393µs
+  flattening:    1.321042ms
+  total:         4.304938ms
+BSP: Bunny, 4, dep: 20
+  subdivision:   128.489613ms
+  flattening:    15.890057ms
+  total:         144.37967ms
+
+Dragon, 4 leaf primitives:
+Dragon, 4, ST
+  morton_codes:  14.342445ms
+  radix_sort:    8.757931ms
+  treelet_init:  4.184123ms
+  treelet_build: 48.622467ms
+  upper_tree:    347.292µs
+  flattening:    22.982654ms
+  total:         99.236912ms
+Dragon, 4, MT
+  morton_codes:  9.81747ms
+  radix_sort:    3.170978ms
+  treelet_init:  4.180133ms
+  treelet_build: 7.880445ms
+  upper_tree:    419.181µs
+  flattening:    23.81249ms
+  total:         49.280697ms
+BSP: Dragon, 4, dep: 20
+  subdivision:   795.177236ms
+  flattening:    32.752233ms
+  total:         827.929469ms
+
+Dragon, 8 leaf primitives:
+Dragon, 8, ST
+  morton_codes:  13.877526ms
+  radix_sort:    9.273799ms
+  treelet_init:  3.983207ms
+  treelet_build: 29.752219ms
+  upper_tree:    344.455µs
+  flattening:    10.965513ms
+  total:         68.196719ms
+Dragon, 8, MT
+  morton_codes:  9.237541ms
+  radix_sort:    2.94198ms
+  treelet_init:  4.110331ms
+  treelet_build: 4.711496ms
+  upper_tree:    381.411µs
+  flattening:    12.35723ms
+  total:         33.739989ms
+BSP: Dragon, 8, dep: 20
+  subdivision:   780.522113ms
+  flattening:    30.659233ms
+  total:         811.181346ms
+```
 
 #### 4.2.2 Rendering Performance
 

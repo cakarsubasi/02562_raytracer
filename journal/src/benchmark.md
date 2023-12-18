@@ -32,7 +32,7 @@ BVH: Dragon (871,414), 4, MT
   total:         49.280697ms
 ----------------------------------
 
-Performance scaling with triangles (2/4):
+Performance scaling with maximum leaf primitives (2/4):
 BVH: Dragon, 1, MT
   morton_codes:  10.747579ms
   radix_sort:    3.310354ms
@@ -100,7 +100,7 @@ BVH: Dragon, 4, ST
   upper_tree:    347.292µs
   flattening:    22.982654ms
   total:         99.236912ms
-Dragon, 4, MT
+Dragon, 8, MT
   morton_codes:  9.237541ms
   radix_sort:    2.94198ms
   treelet_init:  4.110331ms

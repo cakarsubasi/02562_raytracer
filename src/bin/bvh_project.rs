@@ -9,14 +9,16 @@ use std::time::{Instant, Duration};
 /// Benchmark binary for the BVH project
 
 fn main() {
+    let runs = 100;
+    run_benchmark(runs);
+}
 
+fn run_benchmark(runs: u32) {
+    println!("Benchmarking with {runs} samples.\n");
     // teapot: 6,320 bunny: 69,451 dragon: 871,414
     let model_teapot = Mesh::from_obj("res/models/teapot.obj").expect("Failed to load model");
     let model_bunny = Mesh::from_obj("res/models/bunny.obj").expect("Failed to load model");
     let model_dragon = Mesh::from_obj("res/models/dragon.obj").expect("Failed to load model");
-    let runs = 100;
-
-    println!("Benchmarking with {runs} samples.\n");
 
     // Performance scaling with triangles
     println!("Performance scaling with triangles (1/4):");
@@ -29,7 +31,7 @@ fn main() {
     println!("----------------------------------");
 
     // Performance scaling with leaf primitives:
-    println!("\nPerformance scaling with triangles (2/4):");
+    println!("\nPerformance scaling with maximum leaf primitives (2/4):");
     run_bvh(&model_dragon, 1, false, runs).display("BVH: Dragon, 1, MT");
     run_bvh(&model_dragon, 2, false, runs).display("BVH: Dragon, 2, MT");
     bvh_dragon_4_mt.display("Dragon, 4, MT");
@@ -44,7 +46,7 @@ fn main() {
     bvh_dragon_4_mt.display("Dragon, 4, MT");
     let bvh_dragon_4_st = 
     run_bvh(&model_dragon, 4, true, runs).display("BVH: Dragon, 4, ST");
-    bvh_dragon_8_mt.display("Dragon, 4, MT");
+    bvh_dragon_8_mt.display("Dragon, 8, MT");
     let bvh_dragon_8_st = 
     run_bvh(&model_dragon, 8, true, runs).display("BVH: Dragon, 8, ST");
     println!("----------------------------------");
@@ -72,15 +74,16 @@ fn main() {
 
 fn run_bvh(model: &Mesh, max_prims: u32, single_threaded: bool, runs: u32) -> BvhConstructionTime {
     let mut total = BvhConstructionTime::default();
-    for _ in 0..runs {
+    for i in 0..runs {
         let bvh = Bvh::new(&model, max_prims, single_threaded);
         let timer = Instant::now();
         let _ = bvh.flatten();
         let _ = bvh.triangles();
         let flattening_time = timer.elapsed();
-        let mut result = bvh.time;
-        result.flattening = flattening_time;
-        total += result;
+        let mut current = bvh.time;
+        current.flattening = flattening_time;
+        current.display_short(&format!("test {i}"));
+        total += current;
     }
     total /= runs;
     total
