@@ -900,9 +900,15 @@ The result is more or less the same as before.
 
 ##### 4.2.1.4 Performance compared to the BSP
 
-One final comparison I can make before moving onto rendering performance is comparing build speed to the BSP tree. 
+One final comparison I can make before moving onto rendering performance is comparing build speed to the BSP tree. We have used the BSP tree throughout this rendering class and it served us just fine, however it is natural to ask if the effort here to implement a BVH was just a waste if we did not improve upon the BSP tree in any way.
 
-It is worth noting that this section is intended to bash BSP trees as the BSP tree implementation within this rendering framework is not optimized, not parallelized and is more or less a 1 to 1 translation of a Javascript implementation of a BSP tree. 
+Before presenting the results, I would like to note that this section is not intended to bash BSP trees as the BSP tree implementation within this rendering framework is not optimized, not parallelized and is more or less a 1 to 1 translation of a Javascript implementation of a BSP tree. I have chosen to include this comparison since I thought it would be interesting.
+
+A few extra implementation notes on the BSP tree. The BSP tree uses the surface area heuristic during construction, the part that I did not implement for the BVH. The BSP tree also has an additional depth parameter which we can set. Unfortunately, I did not compact the BSP tree when flattening which limits how high the depth parameter can be set since we create a fixed size buffer based on this. The size is 1`20*pow(2, depth)` bytes. So at a depth of 20, our BSP tree will use 20,971,520 bytes which is fixed for all objects, a variable amount of bytes is used to store the primitive indices. 
+
+A depth of 29 takes more space than my GPU VRAM and I have to raise WebGPU limits to have a a depth of more than 22. 
+
+The BVH for the Dragon with 4 maximum leaf primitives uses 32,009,152 bytes for the tree and both structures use 3,485,656 bytes for the indices. That is more than the BSP tree, however the problem here is the BSP tree is not guaranteed to be balanced, so it is possible there are leaf nodes with way too many primitives.
 
 ```
 Teapot:
@@ -911,63 +917,75 @@ BVH: Teapot, 4, MT
 BSP: Teapot, 4, dep: 20
   subdivision:   23.032083ms
   flattening:    8.43311ms
-  total:         31.465193ms
+  total:         31.465193ms (31.7x)
 
 Bunny:
-BVH: Bunny , 4, MT
+BVH: Bunny, 4, MT
   total:         4.304938ms
 BSP: Bunny, 4, dep: 20
   subdivision:   128.489613ms
   flattening:    15.890057ms
-  total:         144.37967ms
+  total:         144.37967ms (33.5x)
+```
 
+The comparison did not begin well. On both the teapot and the bunny, the BSP tree implementation is over 30 times slower.
+
+```
 Dragon, 4 leaf primitives:
 BVH: Dragon, 4, ST
-  total:         99.236912ms
+  total:         99.236912ms  (2.01x)
 BVH: Dragon, 4, MT
-  total:         49.280697ms
+  total:         49.280697ms  (1.0x)
 BSP: Dragon, 4, dep: 20
   subdivision:   795.177236ms
   flattening:    32.752233ms
-  total:         827.929469ms
+  total:         827.929469ms (16.8x)
+```
 
+The Dragon result is not as bad at initial glance, being only about 8 times slower than the single threaded version and 16 times slower than the multithreaded. However, the reason for this is not because the BSP tree is magically sublinear but because we are limiting recursion depth and creating a leaf node early when we hit it. For the dragon, a depth of 20 is probably too low. We can see this by setting the maximum leaf node primitive count higher.
+
+```
 Dragon, 8 leaf primitives:
-BVH: Dragon, 8, ST
-  total:         68.196719ms
-BVH: Dragon, 8, MT
-  total:         33.739989ms
 BSP: Dragon, 8, dep: 20
   subdivision:   780.522113ms
   flattening:    30.659233ms
   total:         811.181346ms
 ```
 
+With such a minor change in performance, this suggests we are generally hitting the recursion depth earlier than we are going under 8 primitives, this will be relevant in the next part.
+
 #### 4.2.2 Rendering Performance
 
 Now for the rendering performance. It is important to note that under every single case I show here, we were CPU bound, in other words there was always some time where the GPU was sitting idle. In addition, the GPU occupancy (parts of the GPU that were used during the shader) was low for every case. This means that this is not a reliable comparison of the rendering performance of the methods. In addition, with such stark differences in rendering performance with some changes to the bounding box intersection for the BVH, there are might be other optimization opportunities that significantly improve rendering performance for both the BSP and the BVH.
 
-I used the Stanford Dragon as seen in this report at a resolution of 800x450 with Lambertian materials. The exact shader that is used can be seen in `res/shaders/project.wgsl`. Depending on whether the BSP tree or the BVH was used, `res/shaders/bsp.wgsl` or `res/shaders/bvh.wgsl` was appended to the shader to use the correct traversal functions. The BSP also stores an extra axis aligned bounding box for the whole object that skips traces some rays, this is always the case on the BVH, so the operation is replaced with a noop.
+I used the Stanford Dragon as seen in this report at a resolution of 800x450 with Lambertian materials. The exact shader that is used can be seen in `res/shaders/project.wgsl`. Depending on whether the BSP tree or the BVH was used, `res/shaders/bsp.wgsl` or `res/shaders/bvh.wgsl` was appended to the shader to use the correct traversal functions. The BSP also stores an extra axis aligned bounding box for the whole object that skips traces some rays, this is always the case on the BVH, so the operation is replaced with a noop. I count the number of rendered frames approximately every 5 seconds.
 
-Dragon BSP:
-
+```
+Dragon BSP (max depth at 20):
 Frames: 360, avg: 13.901 ms
 Frames: 367, avg: 13.662 ms
 Frames: 358, avg: 13.974 ms
 Frames: 351, avg: 14.264 ms
 
-Dragon BVH:
+Dragon BSP (max depth at 22):
+Frames: 490, avg: 10.218 ms
+Frames: 491, avg: 10.185 ms
+Frames: 462, avg: 10.842 ms
+Frames: 480, avg: 10.424 ms
 
+Dragon BVH:
 Frames: 629, avg: 7.949 ms
 Frames: 643, avg: 7.776 ms
 Frames: 632, avg: 7.923 ms
 Frames: 596, avg: 8.396 ms
+```
+
+The BVH managed to beat the BSP tree by a pretty substantial margin. The BSP tree closes the gap somewhat when I set the recursion depth 2 higher, the highest I can set it before WebGPU begins to complain and it is likely if we compact the flattened array to remove this limitation, performance would be even better, but still not a bad result since I have also not implemented certain traversal optimizations for the BVH present in the PBR book.
 
 ## 5. Discussion
 
-Considering how much of the work already existed, this was still a lot of work. The amount of debugging however was surprisingly little, there was no long period of being stuck like when implementing the BSP Tree, when I finished it end to end, it worked with surprisingly little debugging (maybe Rust is really saving me here but I can't say). The performance I achieved for BVH construction is not quite good enough for real time use, however it is close.
+Considering how much of the work was already provided, this was still a lot of work to implement. The amount of debugging however was surprisingly little, there was no long period of being stuck like when implementing the BSP Tree, when I finished it end to end, it worked with surprisingly little debugging (maybe Rust is really saving me here but I cannot say). The performance I achieved for BVH construction is not quite good enough for real time use, however it is close.
 
-The next step would be to implement a higher quality but slower upper tree construction algorithm. The Radix sort and even number of elements split was enough to outperform the BSP Tree provided within this course, so it is likely that there is more performance that is left on the table here in terms of rendering. Ultimately, the HLBVH does not generate the highest quality trees
+The next step would be to implement a higher quality but slower upper tree construction algorithm. The Radix sort and even number of elements split was enough to outperform the BSP Tree provided within this course, so it is likely that there is more performance that is left on the table here in terms of rendering. Ultimately, the HLBVH does not generate the highest quality trees as seen in @@NVIDIA:7 . In addition, this is still a CPU algorithm and I did not include marshalling costs within the performance metrics which are very much applicable in the real world. It makes a lot of sense to do BVH construction within the GPU itself although I was not going to attempt this with how limited WebGPU Compute is right now.
 
-
-
-@@NVIDIA:7
+I am personally very interested in details and I hope to have pointed out many opportunities for improvement as well as subtleties within this report. 
