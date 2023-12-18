@@ -5,7 +5,7 @@
 /// Apache License 2.0
 
 
-use std::{env, iter, time::Instant, sync::Arc};
+use std::{iter, time::Instant, sync::Arc};
 
 use strum::IntoEnumIterator;
 
@@ -52,8 +52,6 @@ pub struct ControlPanel {
     display_mode: DisplayMode,
     max_samples: u32,
     progressive_enabled: bool,
-    scene_path: String,
-    model_path: String,
 }
 
 impl ControlPanel {
@@ -107,8 +105,6 @@ impl ControlPanel {
             surface.get_capabilities(&gpu_handles.adapter).formats[0];
         let render_pass: RenderPass = RenderPass::new(&gpu_handles.device, surface_format, 1);
 
-        let path = String::from("");
-        let model = String::from("");
         let window_id: WindowId = window.id();
 
         ControlPanel {
@@ -121,8 +117,6 @@ impl ControlPanel {
             camera_constant: scenes[0].camera.constant,
             sphere_material: ShaderType::Glossy,
             other_material: ShaderType::Lambertian,
-            scene_path: path,
-            model_path: model,
             use_texture: TextureUse::Default,
             texture_uv_scale: (0.2, 0.2),
             pixel_subdivision: 1,
@@ -235,8 +229,8 @@ impl ControlPanel {
         &mut self,
         context: &Context,
         commands: &Sender<Command>,
-        has_focus: &mut bool,
-        redraw_gui: &mut bool,
+        _has_focus: &mut bool,
+        _redraw_gui: &mut bool,
     ) {
         egui::CentralPanel::default().show(context, |ui| {
             ui.heading("control panel");
@@ -275,101 +269,6 @@ impl ControlPanel {
                     self.create_max_sample_ui(ui, commands);
                 });
             });
-        });
-    }
-
-    fn create_path_ui(
-        &mut self,
-        ui: &mut Ui,
-        commands: &Sender<Command>,
-        has_focus: &mut bool,
-        redraw_gui: &mut bool,
-    ) {
-        // Load different shaders
-        ui.horizontal(|ui: &mut Ui| {
-            let load_shader_button = ui.button("Load Shader");
-
-            if load_shader_button.changed() {
-                *redraw_gui = true;
-            };
-
-            if load_shader_button.clicked() {
-                commands
-                    .send(Command::LoadShader {
-                        shader_path: self.scene_path.clone(),
-                    })
-                    .unwrap();
-            }
-
-            ui.label("Path");
-
-            let text_edit_singleline_response: Response =
-                ui.text_edit_singleline(&mut self.scene_path);
-            if text_edit_singleline_response.gained_focus() {
-                *has_focus = true;
-                *redraw_gui = true;
-            }
-            if text_edit_singleline_response.lost_focus() {
-                *has_focus = false;
-            }
-        });
-
-        // This button opens a file dialog and
-        // sets the scene_path to that path.
-        ui.horizontal(|ui: &mut Ui| {
-            if ui.button("Open file..").clicked() {
-                if let Some(path) = rfd::FileDialog::new()
-                    .set_directory(env::current_dir().unwrap())
-                    .add_filter("WGSL Shaders (*.wgsl)", &["wgsl"])
-                    .pick_file()
-                {
-                    self.scene_path = path.display().to_string();
-                }
-            }
-        });
-
-        // load different models
-        ui.horizontal(|ui: &mut Ui| {
-            let load_model_button = ui.button("Load Model");
-
-            if load_model_button.changed() {
-                *redraw_gui = true;
-            };
-
-            if load_model_button.clicked() {
-                eprintln!("Load model not implemented yet.");
-                //commands
-                //    .send(Command::LoadModel {
-                //        shader_path: self.scene_path.clone(),
-                //    })
-                //    .unwrap();
-            }
-
-            ui.label("Path");
-
-            let text_edit_singleline_response: Response =
-                ui.text_edit_singleline(&mut self.scene_path);
-            if text_edit_singleline_response.gained_focus() {
-                *has_focus = true;
-                *redraw_gui = true;
-            }
-            if text_edit_singleline_response.lost_focus() {
-                *has_focus = false;
-            }
-        });
-
-        // This button opens a file dialog and
-        // sets the model_path to that path.
-        ui.horizontal(|ui: &mut Ui| {
-            if ui.button("Open file..").clicked() {
-                if let Some(path) = rfd::FileDialog::new()
-                    .set_directory(env::current_dir().unwrap())
-                    .add_filter("Wavefront OBJ (*.obj)", &["obj"])
-                    .pick_file()
-                {
-                    self.model_path = path.display().to_string();
-                }
-            }
         });
     }
 

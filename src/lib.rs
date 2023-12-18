@@ -395,9 +395,6 @@ fn rendering_thread(
                                 break;
                             };
                         }
-                        Command::LoadShader { shader_path } => {
-                            load_shader(render_state, &shader_path)
-                        }
                         Command::Render { value } => {
                             should_render = value;
                         }
@@ -492,6 +489,7 @@ fn rendering_thread(
     }
 }
 
+#[allow(dead_code)]
 fn load_shader(render_state: &mut RenderState, shader_path: &str) {
     let shader_module =
         pollster::block_on(render_state.create_shader_module_from_file(Path::new(shader_path)));

@@ -10,7 +10,6 @@ use strum_macros::{EnumIter, IntoStaticStr};
 pub enum Command {
     Resize { new_size: PhysicalSize<u32> },
     Render { value: bool },
-    LoadShader { shader_path: String },
     LoadScene { idx: usize },
     SetCameraConstant { constant: f32 },
     SetSphereMaterial { material: ShaderType },
