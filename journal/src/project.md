@@ -2,7 +2,7 @@
 
 ## 1. Introduction
 
-During this course, TODO
+A Bounding Volume Hierarchy is a data structure for accelerating ray tracing. The main goal we have is to have linear build times and strictly sublinear traversal times in terms of the number of primitives in our structure. Fast BVH construction and traversal alongside hardware accelerated ray-triangle and ray-bounding box intersection are what made real time ray tracing possible. 
 
 The implementation of the BVH in this project is based heavily on the Hierarchical Linear BVH (HLBVH) described in the 4th edition of the PBR book @@PBR:6 . Unfortunately, being pressed for time, I was unable to implement anything fancier or implement all of the optimizations described in the PBR book however what is here should still be quite enough.
 
@@ -125,16 +125,13 @@ And:
         // The idea is that we convert each primitive to a single coordinate between (0, 0, 0) and (1, 1, 1)
         // relative to the overall boundary of the object. Using 32-bit floats, we only need 10-bits of fixed
         // precision to represent this range, but this will degrade quality on very large scenes
-        let mut morton_primitives = vec![MortonPrimitive::new(); primitives.len()];
-        morton_primitives
-            .iter_mut()
-            .enumerate()
-            .for_each(|(idx, morton)| {
-                morton.index = idx as u32;
-                let centroid_offset = bound.offset(primitives[idx].bbox.center());
-                let offset = centroid_offset * morton_scale as f32;
-                morton.morton_code = encode_morton_3(offset.0, offset.1, offset.2);
-            });
+        let mut morton_primitives: Vec<MortonPrimitive> = (0..primitives.len()).into_par_iter().map(|idx| {
+            let offset = bound.offset(primitives[idx].bbox.center()) * morton_scale;
+            MortonPrimitive {
+                index: idx as u32,
+                morton_code: encode_morton_3(offset.0, offset.1, offset.2),
+            }
+        }).collect();
 ```
 
 All operations here also run in linear time. `encode_morton_3` is straight out of the PBR book and unless using a different Morton code (perhaps a different size), there was nothing to change with it.
@@ -746,6 +743,8 @@ Dragon, BVH on top, BSP on the bottom.
 
 I will discuss the performance in two contexts. First is the tree build time and the second is tree traversal time. I will compare them to the BSP Tree implementation that I wrote during the lectures which is nowhere near optimal but neither is the BVH (which hopefully is clear so far in this report). For performance, I wrote a mini benchmark suite, this can be found in `src/bin/bvh_project.rs` and a helper type can be found in `src/data_structures/bvh_util.rs`. For every test, I constructed the BVH or BSP tree 100 times with the provided parameters and took the arithmetic mean of all runs. I did not calculate the variance although this is a deterministic algorithm and the difference between runs was relatively low, except for the very first run which generally underperformed other runs by 10-20%, this is likely not caused by the cache but the turbo behavior of my laptop. Results that used the same parameters were reused between comparisons, for example the 100 runs of the dragon's multithreaded BVH construction with 4 maximum leaf primitives is the same one in every comparison. Cargo was invoked at release mode with the default compiler optimization flags, it is possible that "z" or "s" flag might provide better performance than the results below, debug builds ran about 10 times slower but the results are not included as they are not relevant.
 
+The testing was done on an AMD Ryzen 7 7735HS laptop with 8 cores with SMT and a maximum boost clock of 4.75 GHz.
+
 #### 4.2.1 Building Performance
 
 Before we do various comparisons, I would like to discuss the runtime of various different stages when constructing the BVH of a large mesh such as the Stanford Dragon. This is the "baseline" which I used for most of the comparisons in the rest of the section.
@@ -761,25 +760,44 @@ MT  treelet_build: 7.880445ms
     total:         49.280697ms
 ```
 
-Only three of the six steps were parallelized for the project.
+Assigning Morton codes was the second slowest step despite being multithreaded and it is mostly bitwise operations. It is possible that Rust is generate suboptimal assembly however. There are also some vector operations in there. The vector operations are not vectorized, so perhaps some performance gain is possible in that area.
+
+Radix sort was provided by an external library, and it is extremely efficient to say the least.
+
+Initialization of treelets take a meaningful amount of time although I likely would not parallelize this directly. It is possible to start the build phase as soon as we do at least one loop of the initialization, so I would likely try that to mask the latency as in every test, the build phase was slower than the initialization.
+
+The build phase is surprisingly fast despite the amount of code it has, and it benefits the most from parallelization (as we will see shortly), although there are likely further optimizations that are possible.
+
+The upper tree construction takes almost no time at all despite not being parallelized, but this was not hugely surprising given the algorithm used was fairly trivial. I would implement a higher quality algorithm like surface area heuristic splitting first before bothering with parallelization.
+
+The worst result however comes from the flattening which was the first one I have written and it uses a recursive algorithm not in tail form. Rayon which I have used to provide parallelism through iterators cannot be used there so I have to explicitly manage threads and it is the first candidate for optimization.
 
 ##### 4.2.1.1 Effect of Triangles
+
+Perhaps the most important question to ask with regards to our BVH is "does it scale"? Having started with an \\(O(n^3)\\) BVH construction algorithm as a warmup to the project, I attempted to build the BVH for the teapot, and stopped the program after waiting for a few minutes. The number of triangles in our objects are as follows:
 
 ```
 teapot:   6,320 (1.0x) 
 bunny:   69,451 (10.99x)
-dragon: 871,414 (137.88x)
+dragon: 871,414 (137.88x, 12.55x)
 ```
+
+So, in order to meet our requirement of linear build times, we need to beat those numbers. First total build times:
 
 ```
 BVH: Teapot (6,320), 4, MT
-  morton_codes:  174.9µs
-  radix_sort:    99.994µs
-  treelet_init:  68.982µs
-  treelet_build: 236.276µs
-  upper_tree:    263.86µs
-  flattening:    149.058µs
   total:         993.07µs
+BVH: Bunny (69,451), 4, MT
+  total:         4.304938ms
+BVH: Dragon (871,414), 4, MT
+  total:         49.280697ms
+```
+
+The Bunny took 4.3 times the time to build as the Teapot, the Dragon took 49.6 times and 11.4 times to build as the Bunny and the Teapot respectively, the Dragon has 12.6 times as many triangles as the Bunny. These meet our requirements, although they do not definitevely prove that our construction time is linear.
+
+It is also a good idea to check the respective times for each part of the building process. Since the Teapot seems small enough that our constant time operations are taking a significant amount of time, I will only compare the bunny and the dragon.
+
+```
 BVH: Bunny (69,451), 4, MT
   morton_codes:  789.972µs
   radix_sort:    885.317µs
@@ -787,146 +805,108 @@ BVH: Bunny (69,451), 4, MT
   treelet_build: 686.7µs
   upper_tree:    313.393µs
   flattening:    1.321042ms
-  total:         4.304938ms
 BVH: Dragon (871,414), 4, MT
-  morton_codes:  9.81747ms
-  radix_sort:    3.170978ms
-  treelet_init:  4.180133ms
-  treelet_build: 7.880445ms
-  upper_tree:    419.181µs
-  flattening:    23.81249ms
-  total:         49.280697ms
+  morton_codes:  9.81747ms  (12.4x)
+  radix_sort:    3.170978ms (3.58x)
+  treelet_init:  4.180133ms (13.6x)
+  treelet_build: 7.880445ms (11.4x)
+  upper_tree:    419.181µs  (1.34x)
+  flattening:    23.81249ms (18.0x)
 ```
 
-```
-BVH: Teapot (6,320), 4, MT
-  total:         993.07µs
-BVH: Bunny (69,451), 4, MT
-  total:         4.304938ms
-BVH: Dragon (871,414), 4, MT
-  total:         49.280697ms
-```
+Morton code generation is almost perfectly linear here which is unsurprising. Radix sort performed quite a bit better than linear which I suspect is because with a much bigger array, it was more effectively multithreaded. Treelet initialization performed slightly worse than linear although I suspect it might be because of the vector which we create without preallocating the size since we do not know how many treelets we have, vector resizing results in amortized linear time so I am not hugely concerned by this result. Building of treelets was also almost perfectly linear although we likely gained a little bit of performance due to better parallel utilization. The upper tree generation algorithm is linear on the number of treelets and not the number of primitives, and the Dragon only had modestly more treelets than the Bunny (1259 versus 938 which is in fact 1.34x). The flattening is the only concerning result and it is honestly a bit surprising, I cannot make any further claims here as I would need to investigate further to determine what is going on.
 
 ##### 4.2.1.2 Effect of Leaf Primitives
 
+There is actually one parameter of our BVH that we can vary. The number of primitives in leaf nodes. I have used the number 4 so far. This was entirely arbitrary and was only picked since it is the number we used for the BSP tree. A higher number of primitives in a leaf node means we will more quickly reach leaf nodes within a tree and there is less pointer chasing, but we have to check every single primitive once we reach a leaf node. Analyzing the effects of the maximum number of primitives in the leaf nodes of a BVH in traversal performance is outside the scope of this report, however we can still take a look at how they affect building performance.
+
+Morton code generation, Radix sort, treelet initialization and building the upper tree are unaffected by the number of primitives on leaf nodes. So we only check treelet building and the flattening.
+
 ```
-BVH: Dragon, 1, MT
-  morton_codes:  10.747579ms
-  radix_sort:    3.310354ms
-  treelet_init:  4.281506ms
-  treelet_build: 14.285238ms
-  upper_tree:    429.017µs
-  flattening:    68.385026ms
-  total:         101.43872ms
+BVH: Dragon, maximum primitives in leaf nodes: 1, MT
+  treelet_build: 14.285238ms (1.81x)
+  flattening:    68.385026ms (2.87x)
 BVH: Dragon, 2, MT
-  morton_codes:  9.675215ms
-  radix_sort:    2.988587ms
-  treelet_init:  4.199119ms
-  treelet_build: 13.021131ms
-  upper_tree:    422.889µs
-  flattening:    63.280614ms
-  total:         93.587555ms
-Dragon, 4, MT
-  morton_codes:  9.81747ms
-  radix_sort:    3.170978ms
-  treelet_init:  4.180133ms
-  treelet_build: 7.880445ms
-  upper_tree:    419.181µs
-  flattening:    23.81249ms
-  total:         49.280697ms
+  treelet_build: 13.021131ms (1.65x)
+  flattening:    63.280614ms (2.65x)
+BVH: Dragon, 4, MT
+  treelet_build: 7.880445ms  (1.0x)
+  flattening:    23.81249ms  (1.0x)
 BVH: Dragon, 6, MT
-  morton_codes:  9.180374ms
-  radix_sort:    2.889548ms
-  treelet_init:  4.149981ms
-  treelet_build: 5.422311ms
-  upper_tree:    388.576µs
-  flattening:    16.193306ms
-  total:         38.224096ms
+  treelet_build: 5.422311ms  (0.68x)
+  flattening:    16.19330ms  (0.68x)
 BVH: Dragon, 8, MT
-  morton_codes:  9.237541ms
-  radix_sort:    2.94198ms
-  treelet_init:  4.110331ms
-  treelet_build: 4.711496ms
-  upper_tree:    381.411µs
-  flattening:    12.35723ms
-  total:         33.739989ms
+  treelet_build: 4.711496ms  (0.59x)
+  flattening:    12.35723ms  (0.51x)
 BVH: Dragon, 16, MT
-  morton_codes:  9.42948ms
-  radix_sort:    3.05562ms
-  treelet_init:  4.172411ms
-  treelet_build: 3.5971ms
-  upper_tree:    381.127µs
-  flattening:    6.588801ms
-  total:         27.224539ms
+  treelet_build: 3.5971ms    (0.45x)
+  flattening:    6.588801ms  (0.28x)
 ```
+
+The effect the maximum number of primitives in leaf nodes have on those two steps is quite dramatic. The flattening step more than doubles in time when we go down to 2 maximum primitives per leaf node which is really bad when it already took almost half the time with the baseline 4. On the flip side, we can speed up these steps if we increase this parameter with a pretty impressive 47% speedup in these two steps with 2 more primitives per leaf node. 6 is also not an unusual number for this parameter, so it is not a guarantee that we even lose out on traversal time.
 
 ```
 BVH: Dragon, 1, MT
-  total:         101.43872ms
+  total:         101.43872ms (2.06x)
 BVH: Dragon, 2, MT
-  total:         93.587555ms
-Dragon, 4, MT
-  total:         49.280697ms
+  total:         93.587555ms (1.90x)
+BVH: Dragon, 4, MT
+  total:         49.280697ms (1.0x)
 BVH: Dragon, 6, MT
-  total:         38.224096ms
+  total:         38.224096ms (0.78x)
 BVH: Dragon, 8, MT
-  total:         33.739989ms
+  total:         33.739989ms (0.69x)
 BVH: Dragon, 16, MT
-  total:         27.224539ms
+  total:         27.224539ms (0.55x)
 ```
+
+Since these two steps were the ones that took the most time, the overall effect is still quite dramatic.
 
 ##### 4.2.1.3 Multithreaded Scaling
 
+In the previous sections, we have compared the multithreaded version of the BVH construction. To me, this is the "canonical" version of the algorithm as you are leaving performance on the table otherwise. However, parallel efficiency is still an important performance metric so it is worth looking into how well the multithreaded parts of the algorithm scale. As mentioned previously, testing was done on an 8 core Ryzen 7 with SMT. This means a maximum speedup of somewhat less than 8 times (as boost clocks reduce when more cores are under load). I have excluded here the parts of the algorithm that were not parallelized.
+
 ```
-Dragon, 4, MT
+BVH: Dragon, 4, MT
   morton_codes:  9.81747ms
   radix_sort:    3.170978ms
-  treelet_init:  4.180133ms
-  treelet_build: 7.880445ms
-  upper_tree:    419.181µs
-  flattening:    23.81249ms
-  total:         49.280697ms
+  treelet_build: 7.880445ms  
+  total:         49.280697ms 
 BVH: Dragon, 4, ST
-  morton_codes:  14.342445ms
-  radix_sort:    8.757931ms
-  treelet_init:  4.184123ms
-  treelet_build: 48.622467ms
-  upper_tree:    347.292µs
-  flattening:    22.982654ms
-  total:         99.236912ms
+  morton_codes:  14.342445ms (1.46x)
+  radix_sort:    8.757931ms  (2.76x)
+  treelet_build: 48.622467ms (6.17x)
+  total:         99.236912ms (2.01x)
 ```
 
+Generating Morton codes barely scale with a 46% speedup. This could mean two entirely opposite things. It is possible that Rayon, which I have used to parallelize the workloads here have not generated great assembly or there is some other code generation issue which results in far less speedup than possible in which case, we should look into that problem. Far more pessimistically however, the two sequential operations within this part, which are allocating the vector and pushing elements are such relatively large parts of the operation that they are greatly limiting the possible performance gains here. 
+
+As Radix sort is provided by an external library, I cannot comment on how good its modest but not optimal speedup is. It is possible the speedup is improved if we use more than 4 bytes for the Morton code but there might be a larger slowdown on the initial step.
+
+The treelet building however benefits massively from parallelization. It is not clear if this is close to optimal due to platform boost behavior but it should be close. And this makes sense as the individual workload per thread is decently large and we have almost no sequential computation besides just creating the threads themselves. The algorithm is also lock free and there is no synchronization between threads, only a single atomic access which is done right when each thread terminates.
+
+I have also checked whether a higher number of maximum primitives per leaf node would affect parallelization. This would not change the parallelization itself but would limit the recursion depth more terminating each thread quicker.
+
 ```
-Dragon, 8, MT
-  morton_codes:  9.237541ms
-  radix_sort:    2.94198ms
-  treelet_init:  4.110331ms
+BVH: Dragon, 8, MT
   treelet_build: 4.711496ms
-  upper_tree:    381.411µs
-  flattening:    12.35723ms
   total:         33.739989ms
 BVH: Dragon, 8, ST
-  morton_codes:  13.877526ms
-  radix_sort:    9.273799ms
-  treelet_init:  3.983207ms
-  treelet_build: 29.752219ms
-  upper_tree:    344.455µs
-  flattening:    10.965513ms
-  total:         68.196719ms
+  treelet_build: 29.752219ms (6.31x)
+  total:         68.196719ms (2.02x)
 ```
 
+The result is more or less the same as before.
 
 ##### 4.2.1.4 Performance compared to the BSP
+
+One final comparison I can make before moving onto rendering performance is comparing build speed to the BSP tree. 
+
+It is worth noting that this section is intended to bash BSP trees as the BSP tree implementation within this rendering framework is not optimized, not parallelized and is more or less a 1 to 1 translation of a Javascript implementation of a BSP tree. 
 
 ```
 Teapot:
 BVH: Teapot, 4, MT
-  morton_codes:  174.9µs
-  radix_sort:    99.994µs
-  treelet_init:  68.982µs
-  treelet_build: 236.276µs
-  upper_tree:    263.86µs
-  flattening:    149.058µs
   total:         993.07µs
 BSP: Teapot, 4, dep: 20
   subdivision:   23.032083ms
@@ -935,12 +915,6 @@ BSP: Teapot, 4, dep: 20
 
 Bunny:
 BVH: Bunny , 4, MT
-  morton_codes:  789.972µs
-  radix_sort:    885.317µs
-  treelet_init:  308.514µs
-  treelet_build: 686.7µs
-  upper_tree:    313.393µs
-  flattening:    1.321042ms
   total:         4.304938ms
 BSP: Bunny, 4, dep: 20
   subdivision:   128.489613ms
@@ -948,21 +922,9 @@ BSP: Bunny, 4, dep: 20
   total:         144.37967ms
 
 Dragon, 4 leaf primitives:
-Dragon, 4, ST
-  morton_codes:  14.342445ms
-  radix_sort:    8.757931ms
-  treelet_init:  4.184123ms
-  treelet_build: 48.622467ms
-  upper_tree:    347.292µs
-  flattening:    22.982654ms
+BVH: Dragon, 4, ST
   total:         99.236912ms
-Dragon, 4, MT
-  morton_codes:  9.81747ms
-  radix_sort:    3.170978ms
-  treelet_init:  4.180133ms
-  treelet_build: 7.880445ms
-  upper_tree:    419.181µs
-  flattening:    23.81249ms
+BVH: Dragon, 4, MT
   total:         49.280697ms
 BSP: Dragon, 4, dep: 20
   subdivision:   795.177236ms
@@ -970,21 +932,9 @@ BSP: Dragon, 4, dep: 20
   total:         827.929469ms
 
 Dragon, 8 leaf primitives:
-Dragon, 8, ST
-  morton_codes:  13.877526ms
-  radix_sort:    9.273799ms
-  treelet_init:  3.983207ms
-  treelet_build: 29.752219ms
-  upper_tree:    344.455µs
-  flattening:    10.965513ms
+BVH: Dragon, 8, ST
   total:         68.196719ms
-Dragon, 8, MT
-  morton_codes:  9.237541ms
-  radix_sort:    2.94198ms
-  treelet_init:  4.110331ms
-  treelet_build: 4.711496ms
-  upper_tree:    381.411µs
-  flattening:    12.35723ms
+BVH: Dragon, 8, MT
   total:         33.739989ms
 BSP: Dragon, 8, dep: 20
   subdivision:   780.522113ms
@@ -996,11 +946,23 @@ BSP: Dragon, 8, dep: 20
 
 Now for the rendering performance. It is important to note that under every single case I show here, we were CPU bound, in other words there was always some time where the GPU was sitting idle. In addition, the GPU occupancy (parts of the GPU that were used during the shader) was low for every case. This means that this is not a reliable comparison of the rendering performance of the methods. In addition, with such stark differences in rendering performance with some changes to the bounding box intersection for the BVH, there are might be other optimization opportunities that significantly improve rendering performance for both the BSP and the BVH.
 
+I used the Stanford Dragon as seen in this report at a resolution of 800x450 with Lambertian materials. The exact shader that is used can be seen in `res/shaders/project.wgsl`. Depending on whether the BSP tree or the BVH was used, `res/shaders/bsp.wgsl` or `res/shaders/bvh.wgsl` was appended to the shader to use the correct traversal functions. The BSP also stores an extra axis aligned bounding box for the whole object that skips traces some rays, this is always the case on the BVH, so the operation is replaced with a noop.
+
 Dragon BSP:
+
+Frames: 360, avg: 13.901 ms
+Frames: 367, avg: 13.662 ms
+Frames: 358, avg: 13.974 ms
+Frames: 351, avg: 14.264 ms
 
 Dragon BVH:
 
-## Discussion
+Frames: 629, avg: 7.949 ms
+Frames: 643, avg: 7.776 ms
+Frames: 632, avg: 7.923 ms
+Frames: 596, avg: 8.396 ms
+
+## 5. Discussion
 
 Considering how much of the work already existed, this was still a lot of work. The amount of debugging however was surprisingly little, there was no long period of being stuck like when implementing the BSP Tree, when I finished it end to end, it worked with surprisingly little debugging (maybe Rust is really saving me here but I can't say). The performance I achieved for BVH construction is not quite good enough for real time use, however it is close.
 
