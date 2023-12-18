@@ -232,7 +232,7 @@ impl Mesh {
 
     pub fn bvh(&self) -> Bvh {
         let start = std::time::Instant::now();
-        let bvh = hlbvh::Bvh::new(&self, 7, false);
+        let bvh = hlbvh::Bvh::new(&self, 4, false);
         let passed = start.elapsed();
         println!("built BVH in {:?}", passed);
         bvh
