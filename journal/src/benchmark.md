@@ -2,7 +2,7 @@
 
 This file includes the raw output of the benchmark file in case I left out some information within the report.
 
-```sh
+```
 Benchmarking with 100 samples.
 
 Performance scaling with triangles (1/4):
@@ -49,7 +49,7 @@ BVH: Dragon, 2, MT
   upper_tree:    422.889µs
   flattening:    63.280614ms
   total:         93.587555ms
-Dragon, 4, MT
+BVH: Dragon, 4, MT
   morton_codes:  9.81747ms
   radix_sort:    3.170978ms
   treelet_init:  4.180133ms
@@ -84,7 +84,7 @@ BVH: Dragon, 16, MT
 ----------------------------------
 
 Multithreaded performance scaling (3/4):
-Dragon, 4, MT
+BVH: Dragon, 4, MT
   morton_codes:  9.81747ms
   radix_sort:    3.170978ms
   treelet_init:  4.180133ms
@@ -100,7 +100,7 @@ BVH: Dragon, 4, ST
   upper_tree:    347.292µs
   flattening:    22.982654ms
   total:         99.236912ms
-Dragon, 8, MT
+BVH: Dragon, 8, MT
   morton_codes:  9.237541ms
   radix_sort:    2.94198ms
   treelet_init:  4.110331ms
@@ -149,7 +149,7 @@ BSP: Bunny, 4, dep: 20
   total:         144.37967ms
 
 Dragon, 4 leaf primitives:
-Dragon, 4, ST
+BVH: Dragon, 4, ST
   morton_codes:  14.342445ms
   radix_sort:    8.757931ms
   treelet_init:  4.184123ms
@@ -157,7 +157,7 @@ Dragon, 4, ST
   upper_tree:    347.292µs
   flattening:    22.982654ms
   total:         99.236912ms
-Dragon, 4, MT
+BVH: Dragon, 4, MT
   morton_codes:  9.81747ms
   radix_sort:    3.170978ms
   treelet_init:  4.180133ms
@@ -171,7 +171,7 @@ BSP: Dragon, 4, dep: 20
   total:         827.929469ms
 
 Dragon, 8 leaf primitives:
-Dragon, 8, ST
+BVH: Dragon, 8, ST
   morton_codes:  13.877526ms
   radix_sort:    9.273799ms
   treelet_init:  3.983207ms
@@ -179,7 +179,7 @@ Dragon, 8, ST
   upper_tree:    344.455µs
   flattening:    10.965513ms
   total:         68.196719ms
-Dragon, 8, MT
+BVH: Dragon, 8, MT
   morton_codes:  9.237541ms
   radix_sort:    2.94198ms
   treelet_init:  4.110331ms

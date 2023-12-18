@@ -93,7 +93,7 @@ Unlike the BSP tree, we have the bounding box of every node stored, and leaf nod
 
 The PBR book implementation also uses split information to speed up traversal by visiting fewer nodes, I was not able to implement this functionality.
 
-### 3.1 Tree
+### 3.1 Construction
 
 The first step is Morton Code generation. The process is as follows.
 
@@ -714,7 +714,7 @@ fn intersect_bb3(ray_dir_inv: vec3f, ray_orig: vec3f, bbox: BvhNode) -> bool {
 
 If I were to speculate, with the GPU utilization generally being low, there is high register pressure and there is a lot more loads and stores used for the second one, which is why all of the individual branches end up being faster than the select functions.
 
-## 4. Results
+## 4. Results and Discussion
 
 ### 4.1 Correctness
 
@@ -982,7 +982,7 @@ Frames: 596, avg: 8.396 ms
 
 The BVH managed to beat the BSP tree by a pretty substantial margin. The BSP tree closes the gap somewhat when I set the recursion depth 2 higher, the highest I can set it before WebGPU begins to complain and it is likely if we compact the flattened array to remove this limitation, performance would be even better, but still not a bad result since I have also not implemented certain traversal optimizations for the BVH present in the PBR book.
 
-## 5. Discussion
+## 5. Conclusion
 
 Considering how much of the work was already provided, this was still a lot of work to implement. The amount of debugging however was surprisingly little, there was no long period of being stuck like when implementing the BSP Tree, when I finished it end to end, it worked with surprisingly little debugging (maybe Rust is really saving me here but I cannot say). The performance I achieved for BVH construction is not quite good enough for real time use, however it is close.
 
