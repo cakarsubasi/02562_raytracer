@@ -15,15 +15,22 @@ impl BvhConstructionTime {
         self.morton_codes + self.radix_sort + self.treelet_init + self.treelet_build + self.upper_tree + self.flattening
     }
 
-    pub fn display(&self, text: &str) {
+    pub fn display(&self, text: &str) -> Self {
         println!("{}", text);
-        println!("morton_codes: {:?}", self.morton_codes);
-        println!("radix_sort:   {:?}", self.radix_sort);
-        println!("treelet_init: {:?}", self.treelet_init);
-        println!("treelet_build:{:?}", self.treelet_build);
-        println!("upper_tree:   {:?}", self.upper_tree);
-        println!("flattening:   {:?}", self.flattening);
-        println!("total:        {:?}", self.total())
+        println!("  morton_codes:  {:?}", self.morton_codes);
+        println!("  radix_sort:    {:?}", self.radix_sort);
+        println!("  treelet_init:  {:?}", self.treelet_init);
+        println!("  treelet_build: {:?}", self.treelet_build);
+        println!("  upper_tree:    {:?}", self.upper_tree);
+        println!("  flattening:    {:?}", self.flattening);
+        println!("  total:         {:?}", self.total());
+        *self
+    }
+
+    pub fn display_short(&self, text: &str) -> Self {
+        println!("{}", text);
+        println!("  total:         {:?}", self.total());
+        *self
     }
 }
 

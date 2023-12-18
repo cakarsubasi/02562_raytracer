@@ -1,25 +1,14 @@
 # Bounding Volume Hierarchy
 
-Introduction, Method, Implementation, Results, Discussion
+## 1. Introduction
 
-## Checklist:
+During this course, TODO
 
-[✅] - Write a BVH traversal function in wgsl
-[❌] - Add split info to optimize BVH traversal
+The implementation of the BVH in this project is based heavily on the Hierarchical Linear BVH (HLBVH) described in the 4th edition of the PBR book @@PBR:6 . Unfortunately, being pressed for time, I was unable to implement anything fancier or implement all of the optimizations described in the PBR book however what is here should still be quite enough.
 
-[✅] - Write an O(n^3) BVH constructor in Rust
-[✅] - Write an O(n) BVH constructor in Rust based on the PBR book implementation
-[❌] - Use SAH or radix tree based upper level BVH constructor
-[✅] - Parallelize the tree construction
-[❌] - Use Arena allocator to speed up construction
+First, I will describe the general implementation of the BVH in the project and how it differs from the PBR book. Then I will go through the implementation in detail where I describe parts of the code. Afterwards, I will provide with some performance metrics for the BVH both in terms of build times as well as traversal times before concluding with a discussion on what I have learned during this project.
 
-During this course, 
-
-The implementation of the BVH in this project is based heavily on the Hierarchical Linear BVH (HLBVH) described in the 4th edition of the PBR book. Unfortunately, being pressed for time, I was unable to implement anything fancier or implement all of the optimizations described in the PBR book however what is here should still be quite enough.
-
-First, I will describe the general implementation of the BVH in the project and how it differs from the PBR book. Then I will
-
-TODO
+In addition to the HLBVH, I also implemented another BVH based on the naive \\(O(n^3)\\) optimal split algorithm. This was mainly done as a warmup and a way to quickly check the correctness of the traversal algorithm. The implementation of that BVH will not be described in this report. There is also no point in discussing performance relating to it as any BVH of a mesh with more than a few hundred triangle takes an eternity to build.
 
 ## 2. Methodology
 
@@ -755,7 +744,7 @@ Dragon, BVH on top, BSP on the bottom.
 
 ### 4.2 Performance
 
-I will discuss the performance in two contexts. First is the tree build time and the second is tree traversal time. I will compare them to the BSP Tree implementation that I wrote during the lectures which is nowhere near optimal but neither is the BVH (which hopefully is clear so far in this report). For performance, I wrote a mini benchmark suite where I ran every test 100 times while also varying different parameters. 
+I will discuss the performance in two contexts. First is the tree build time and the second is tree traversal time. I will compare them to the BSP Tree implementation that I wrote during the lectures which is nowhere near optimal but neither is the BVH (which hopefully is clear so far in this report). For performance, I wrote a mini benchmark suite, this can be found in `src/bin/bvh_project.rs` and a helper type can be found in `src/data_structures/bvh_util.rs`. For every test, I constructed the BVH or BSP tree 100 times with the provided parameters and took the arithmetic mean of all runs. I did not calculate the variance although this is a deterministic algorithm and the difference between runs was relatively low. Results that used the same parameters were reused between comparisons, for example the 100 runs of the dragon's multithreaded BVH construction with 4 maximum leaf primitives is the same one in every comparison. Cargo was invoked at release mode with the default compiler optimization flags, it is possible that "z" or "s" flag might provide better performance than the results below, debug builds ran about 10 times slower but the results are not included as they are not relevant.
 
 #### 4.2.1 Building Performance
 
@@ -777,12 +766,16 @@ Leaf primitives versus performance:
 
 Now for the rendering performance. It is important to note that under every single case I show here, we were CPU bound, in other words there was always some time where the GPU was sitting idle. In addition, the GPU occupancy (parts of the GPU that were used during the shader) was low for every case. This means that this is not a reliable comparison of the rendering performance of the methods. In addition, with such stark differences in rendering performance with some changes to the bounding box intersection for the BVH, there are might be other optimization opportunities that significantly improve rendering performance for both the BSP and the BVH.
 
+Dragon BSP:
+
+Dragon BVH:
+
 ## Discussion
 
 Considering how much of the work already existed, this was still a lot of work. The amount of debugging however was surprisingly little, there was no long period of being stuck like when implementing the BSP Tree, when I finished it end to end, it worked with surprisingly little debugging (maybe Rust is really saving me here but I can't say). The performance I achieved for BVH construction is not quite good enough for real time use, however it is close.
 
 The next step would be to implement a higher quality but slower upper tree construction algorithm. The Radix sort and even number of elements split was enough to outperform the BSP Tree provided within this course, so it is likely that there is more performance that is left on the table here in terms of rendering. Ultimately, the HLBVH does not generate the highest quality trees
 
-@@PBR:6
+
 
 @@NVIDIA:7
