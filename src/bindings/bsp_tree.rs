@@ -121,6 +121,11 @@ impl Bindable for BspTreeGpu {
     _padding2: f32,
 };";
 
+let max_depth = 
+format!("
+const MAX_LEVEL = {}u;
+", self._intermediates.max_depth);
+
         let aabb_code = "res/shaders/aabb.wgsl";
 
         let bsp_tree_code = "res/shaders/bsp.wgsl";
@@ -145,7 +150,7 @@ impl Bindable for BspTreeGpu {
                 bind_type: Some("storage"),
                 var_name: "bspTree",
                 var_type: "array<vec4u>",
-                extra_code: None,
+                extra_code: Some(WgslSource::Str(max_depth)),
             },
             WgslBindDescriptor {
                 struct_def: None,

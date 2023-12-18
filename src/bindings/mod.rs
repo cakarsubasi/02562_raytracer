@@ -75,10 +75,10 @@ pub trait IntoGpu {
     fn into_gpu(&self, device: &wgpu::Device) -> Self::Output;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum WgslSource<'a> {
     #[allow(dead_code)]
-    Str(&'a str),
+    Str(String),
     File(&'a str), // important to avoid redefinitions
 }
 
@@ -103,7 +103,7 @@ fn generate_wgsl_string(
         var_name,   // user provided
         var_type,   // user provided
         extra_code,
-    } = *bind_descriptor; // user provided
+    } = &bind_descriptor; // user provided
 
     let bind_type = if let Some(bind_type) = bind_type {
         format!("<{bind_type}>")
@@ -113,13 +113,13 @@ fn generate_wgsl_string(
     let mut string: String;
     let extra_code = match extra_code {
         None => "",
-        Some(name) => match name {
+        Some(name) => match &name {
             WgslSource::Str(string) => string,
             WgslSource::File(path) => {
                 let mut file = File::open(Path::new(path)).expect(format!("File path {path} is invalid").as_str());
                 string = String::new();
                 file.read_to_string(&mut string).expect(format!("failed to read {path}").as_str());
-                string.as_str()
+                &string
             }
         },
     };

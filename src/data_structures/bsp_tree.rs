@@ -325,6 +325,7 @@ impl Node {
 
 #[derive(Debug)]
 pub struct BspTreeIntermediate {
+    pub max_depth: u32,
     pub bbox: BboxGpu,
     pub ids: Vec<u32>,
     pub bsp_tree: Vec<Vec4u32>,
@@ -336,6 +337,7 @@ impl BspTreeIntermediate {
         let ids = bsp_tree.primitive_ids();
         let (bsp_planes, bsp_tree_vec) = bsp_tree.bsp_array();
         Self {
+            max_depth: bsp_tree.max_depth,
             bbox: bsp_tree.bbox.into(),
             ids,
             bsp_tree: bsp_tree_vec,
