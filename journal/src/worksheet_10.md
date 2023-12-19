@@ -34,7 +34,9 @@ I kind of feel I should look into how I can add some blur to the rendered object
 
 ### 3. "Cool" Scene
 
-Not done.
+I did not have the time, sorry.
+
+![](./img/w10_e3.png)
 
 ### 4. Discussion
 
