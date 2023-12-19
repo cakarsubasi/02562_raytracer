@@ -1,4 +1,4 @@
-# Bounding Volume Hierarchy
+# Linear Bounding Volume Hierarchy
 
 ## 1. Introduction
 
@@ -95,6 +95,8 @@ The PBR book implementation also uses split information to speed up traversal by
 
 ### 3.1 Construction
 
+#### 3.1.1 Morton Code Generation
+
 The first step is Morton Code generation. The process is as follows.
 
 - Generate a bounding box of the entire scene using the center point of the bounding box of every primitive.
@@ -161,6 +163,8 @@ fn encode_morton_3(x: f32, y: f32, z: f32) -> u32 {
 
 After this, we are ready to sort the primitives.
 
+#### 3.1.2 Radix Sort
+
 For Radix Sort, I used the `rdst` crate, which seems to have the best ergonomics. There are two downsides, one is that we use 32-bits to sort while the PBR book uses 30. Second, `rdst` seems to rely on Rust's well defined unsigned integer underflow behavior that panics on debug builds (but works perfectly on release builds). I took the easy way out and do a nlogn sort in debug builds:
 
 ```rs
@@ -176,6 +180,8 @@ For Radix Sort, I used the `rdst` crate, which seems to have the best ergonomics
 ```
 
 As it turns out, even the nlogn sort is fast enough for the Stanford Dragon.
+
+#### 3.1.3 Initializing Treelets
 
 Time to put the primitives into buckets. In the PBR book, they simply put primitives that had the same 12 MSB in their Morton codes in the same bucket. Which is also the case here. There is no real reason to create a separate data type for Treelets as they are just internal nodes themselves, so we only save what we need to, which is the range information. We also give each treelet a wide-pointer to write its ordered primitive indices to. 
 
@@ -206,6 +212,8 @@ Time to put the primitives into buckets. In the PBR book, they simply put primit
 ```
 
 All of the operations here are constant time except for the vector push which can cause a resize but that still ends up being amortized linear time over the loop.
+
+#### 3.1.4 Building Treelets
 
 Time for the complicated part, generating subtrees. Rayon is used for the actual parallelization. Since I already preallocate a buffer for every subtree to write to, it means the `emit_lbvh` function unlike the PBR book implementation requires no synchronization whatsoever. Heap allocations are synchronized at the OS level of course, but we will get there. We have a single atomic variable to sum up the number of nodes used later for a small performance optimization.
 
@@ -345,6 +353,8 @@ Once we determine a split, we perform the recursion and keep doing this until we
             )
 ```
 
+#### 3.1.5 Building the Upper Tree
+
 After all the treelets are generated, they have to be combined into a single tree. The method that the PBR book favors is the SAH or surface area heuristic, which I did not implement (although it would likely be the next step).
 
 ```rs
@@ -425,6 +435,8 @@ And this completes the main build phase.
         }
     }
 ```
+
+#### 3.1.6 Flattening the BVH
 
 However, for this to be useful, we need to have it in a format the GPU can understand. Enter the linear representation:
 
@@ -988,4 +1000,4 @@ Considering how much of the work was already provided, this was still a lot of w
 
 The next step would be to implement a higher quality but slower upper tree construction algorithm. The Radix sort and even number of elements split was enough to outperform the BSP Tree provided within this course, so it is likely that there is more performance that is left on the table here in terms of rendering. Ultimately, the HLBVH does not generate the highest quality trees as seen in @@NVIDIA:7 . In addition, this is still a CPU algorithm and I did not include marshalling costs within the performance metrics which are very much applicable in the real world. It makes a lot of sense to do BVH construction within the GPU itself although I was not going to attempt this with how limited WebGPU Compute is right now.
 
-I am personally very interested in details and I hope to have pointed out many opportunities for improvement as well as subtleties within this report. 
+Hopefully, this report has provided some insights into the details of making a good performing traversal structure. I was unable to implement everything I wanted for the project and would have liked to use a wider variety of sources but I am still overall happy about the result.
