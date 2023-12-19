@@ -1,6 +1,7 @@
 import subprocess
 import os, shutil
 
+
 def main():
     result = subprocess.run(["cargo", "build", "--release"])
 
@@ -12,8 +13,6 @@ def main():
         shutil.copy(executable, build_dir)
     else:
         print("Build failed")
-        
-
 
 
 if __name__ == "__main__":
